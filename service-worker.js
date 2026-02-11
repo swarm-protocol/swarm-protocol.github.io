@@ -9,7 +9,8 @@ const CORE_ASSETS = [
   './public/nopaste/index.html',
   './public/nopaste/style.css',
   './public/nopaste/script.js',
-  './public/feeds/index.html'
+  './public/feeds/index.html',
+  './public/filehost/index.html'
 ];
 
 const updateCache = (request, response) =>
