@@ -81,7 +81,7 @@ self.addEventListener('fetch', event => {
             const acceptsHtml = event.request.headers.get('accept')?.includes('text/html');
             if (acceptsHtml) {
               return new Response(
-                '<!doctype html><title>Offline</title><p>Resource unavailable while offline. Reconnect and try again.</p>',
+                '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Offline</title></head><body><main><p>Resource unavailable while offline. Reconnect and try again.</p></main></body></html>',
                 { status: 503, statusText: 'Offline', headers: { 'Content-Type': 'text/html' } }
               );
             }
