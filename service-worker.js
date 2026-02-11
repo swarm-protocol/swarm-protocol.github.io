@@ -38,25 +38,34 @@ self.addEventListener('fetch', event => {
           );
           return response;
         })
-        .catch(() => caches.match('./index.html'))
+        .catch(err => {
+          console.warn('Navigation fetch failed', err);
+          return caches.match('./index.html');
+        })
     );
     return;
   }
 
   event.respondWith(
     caches.match(event.request)
-      .then(cached => cached || fetch(event.request)
-        .then(response => {
-          if (response && response.ok) {
-            const copy = response.clone();
-            event.waitUntil(
-              caches.open(CACHE_NAME)
-                .then(cache => cache.put(event.request, copy))
-                .catch(err => console.warn('Cache update failed', err))
-            );
-          }
-          return response;
-        })
-      )
+      .then(cached => {
+        if (cached) return cached;
+        return fetch(event.request)
+          .then(response => {
+            if (response && response.ok) {
+              const copy = response.clone();
+              event.waitUntil(
+                caches.open(CACHE_NAME)
+                  .then(cache => cache.put(event.request, copy))
+                  .catch(err => console.warn('Cache update failed', err))
+              );
+            }
+            return response;
+          })
+          .catch(err => {
+            console.warn('Resource fetch failed', err);
+            return caches.match('./index.html');
+          });
+      })
   );
 });
