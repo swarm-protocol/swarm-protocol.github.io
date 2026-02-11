@@ -143,7 +143,7 @@
 
     <script>
     const MAX_SIZE = 5 * 1024 * 1024; // 5 MB
-    const UPLOAD_URL = 'https://0x0.st';
+    const UPLOAD_URL = 'https://file.io';
     const ALLOWED_TYPES = ['image/', 'audio/', 'video/'];
     const STORAGE_KEY = 'filehost_history';
 
@@ -314,7 +314,22 @@
             const uploadPromise = new Promise((resolve, reject) => {
                 xhr.addEventListener('load', () => {
                     if (xhr.status >= 200 && xhr.status < 300) {
-                        resolve(xhr.responseText.trim());
+                        try {
+                            const data = JSON.parse(xhr.responseText);
+                            if (data.success && data.link) {
+                                resolve(data.link);
+                            } else {
+                                reject(new Error('Upload failed: ' + (data.message || 'unknown error')));
+                            }
+                        } catch {
+                            // Fallback: treat response as plain text URL
+                            const text = xhr.responseText.trim();
+                            if (text) {
+                                resolve(text);
+                            } else {
+                                reject(new Error('Upload failed: empty response'));
+                            }
+                        }
                     } else {
                         reject(new Error('Upload failed: HTTP ' + xhr.status));
                     }
