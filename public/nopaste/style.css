@@ -24,22 +24,82 @@ body {
 
 #editor {
     flex-grow: 1;
-    margin-top: -3px;
     overflow: auto;
 }
 
-#controls,
-#copy,
-footer {
+/* Top bar — matches other pages */
+.top-bar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    width: 100%;
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(20px);
+    border-bottom: 3px solid #6b5d52;
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+.top-bar > a {
+    color: #9a77ff;
+    text-decoration: none;
+    font-size: 16px;
+    font-weight: 700;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+}
+.top-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: #89530e;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    flex-shrink: 0;
+}
+.top-controls {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+/* Copy bar */
+.copy-bar {
     background: rgba(255, 255, 255, 0.92);
     backdrop-filter: blur(20px);
     z-index: 10;
     border-bottom: 2px solid #c19a6b;
+    padding: 6px 12px;
+}
+.copy-inner {
+    display: flex;
+    align-items: center;
+    gap: 6px;
 }
 
 footer {
-    border-bottom: none;
-    border-top: 2px solid #c19a6b;
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(20px);
+    z-index: 10;
+    border-top: 3px solid #6b5d52;
+    flex-shrink: 0;
+}
+.footer-inner {
+    display: flex;
+    align-items: center;
+    padding: 6px 12px;
+    gap: 12px;
+}
+.footer-inner > div:first-child {
+    flex: 1;
+}
+.footer-edit {
+    flex-shrink: 0;
 }
 
 #progress {
@@ -51,7 +111,6 @@ footer {
 
 .hidden,
 select,
-#copy:not(.hidden) + #controls,
 body.readonly .hide-readonly,
 body:not(.readonly) .show-readonly,
 body.readonly:not(:hover) #footer {
@@ -77,26 +136,15 @@ a:focus {
     color: #9a77ff;
     outline: none;
 }
-#controls a,
-#footer a {
+.top-bar a,
+footer a {
     text-decoration: none;
     color: #9a77ff;
-}
-#controls a:hover {
-    border-bottom: 1px solid rgba(154, 119, 255, 0.5);
 }
 
 .CodeMirror {
     height: 100%;
     font-family: 'JetBrains Mono', monospace;
-}
-h1 {
-    font: normal 24px 'JetBrains Mono', monospace;
-    white-space: nowrap;
-    color: #89530e;
-}
-h1 span {
-    color: #9a77ff;
 }
 .mono {
     font-family: 'JetBrains Mono', monospace;
@@ -160,7 +208,7 @@ h1 span {
 
 /* Form elements */
 
-#controls .ss-main {
+.top-controls .ss-main {
     width: 180px;
 }
 
@@ -191,6 +239,9 @@ button:hover {
 button:active {
     transform: translate(2px, 2px);
     box-shadow: 0 0 0 #9a77ff !important;
+}
+.np-btn {
+    padding: 2px 8px;
 }
 
 input::-webkit-search-cancel-button {
