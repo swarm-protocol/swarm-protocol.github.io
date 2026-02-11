@@ -282,6 +282,7 @@
 
         // Clear form
         postSubject.value = '';
+        postName.value = '';
         postImage.value = '';
         postBody.value = '';
         replyTo = null;
@@ -291,6 +292,7 @@
         renderPosts();
     });
 
+    // Delete a post and its replies (cascading delete by design)
     function deletePost(no) {
         let posts = getPosts();
         posts = posts.filter(p => p.no !== no && p.replyTo !== no);
