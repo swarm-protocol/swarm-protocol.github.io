@@ -52,12 +52,16 @@ body {
     align-items: center;
 }
 .top-title {
+    flex: 1;
     font-size: 11px;
     font-weight: 700;
     color: #89530e;
     text-transform: uppercase;
     letter-spacing: 1px;
-    flex-shrink: 0;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 .top-controls {
     flex: 1;
@@ -80,6 +84,13 @@ body {
     display: flex;
     align-items: center;
     gap: 6px;
+}
+.copy-inner #copy-link {
+    flex: 1 1 0;
+    min-width: 0;
+}
+.copy-inner button {
+    flex-shrink: 0;
 }
 
 footer {
@@ -175,9 +186,12 @@ footer a {
     cursor: initial;
     position: relative;
     box-shadow: 12px 12px 0 rgba(107, 93, 82, 0.2);
+    padding: 16px;
+    margin: 16px;
 }
 .modal-content h2 {
     color: #89530e;
+    margin-top: 0;
 }
 .modal-content .additional-info {
     opacity: 0.75;
