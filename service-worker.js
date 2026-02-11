@@ -78,6 +78,13 @@ self.addEventListener('fetch', event => {
           })
           .catch(err => {
             console.warn('Resource fetch failed', err);
+            const acceptsHtml = event.request.headers.get('accept')?.includes('text/html');
+            if (acceptsHtml) {
+              return new Response(
+                '<!doctype html><title>Offline</title><p>Resource unavailable while offline. Reconnect and try again.</p>',
+                { status: 503, statusText: 'Offline', headers: { 'Content-Type': 'text/html' } }
+              );
+            }
             return new Response('Resource unavailable: offline.', {
               status: 503,
               statusText: 'Offline',
