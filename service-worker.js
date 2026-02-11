@@ -49,7 +49,21 @@ self.addEventListener('fetch', event => {
   event.respondWith(
     caches.match(event.request)
       .then(cached => {
-        if (cached) return cached;
+        if (cached) {
+          event.waitUntil(
+            fetch(event.request)
+              .then(response => {
+                if (response.ok) {
+                  const copy = response.clone();
+                  return caches.open(CACHE_NAME)
+                    .then(cache => cache.put(event.request, copy))
+                    .catch(err => console.warn('Cache update failed', err));
+                }
+              })
+              .catch(err => console.warn('Resource refresh failed', err))
+          );
+          return cached;
+        }
         return fetch(event.request)
           .then(response => {
             if (response.ok) {
@@ -64,7 +78,11 @@ self.addEventListener('fetch', event => {
           })
           .catch(err => {
             console.warn('Resource fetch failed', err);
-            return new Response('', { status: 504, statusText: 'Offline' });
+            return new Response('Offline', {
+              status: 504,
+              statusText: 'Offline',
+              headers: { 'Content-Type': 'text/plain' }
+            });
           });
       })
   );
