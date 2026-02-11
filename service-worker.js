@@ -5,7 +5,10 @@ const CORE_ASSETS = [
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
-  './public/index.html'
+  './public/index.html',
+  './public/nopaste/index.html',
+  './public/nopaste/style.css',
+  './public/nopaste/script.js'
 ];
 
 const updateCache = (request, response) =>
