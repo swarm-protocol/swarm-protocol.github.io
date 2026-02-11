@@ -32,9 +32,9 @@ self.addEventListener('fetch', event => {
         .then(response => {
           const copy = response.clone();
           event.waitUntil(
-            caches.open(CACHE_NAME)
+              caches.open(CACHE_NAME)
               .then(cache => cache.put(event.request, copy))
-              .catch(err => console.warn('Cache update failed', err))
+              .catch(err => console.warn('Cache update failed for', event.request.url, err))
           );
           return response;
         })
@@ -57,7 +57,7 @@ self.addEventListener('fetch', event => {
                   const copy = response.clone();
                   return caches.open(CACHE_NAME)
                     .then(cache => cache.put(event.request, copy))
-                    .catch(err => console.warn('Cache update failed', err));
+                    .catch(err => console.warn('Cache update failed for', event.request.url, err));
                 }
               })
               .catch(err => console.warn('Resource refresh failed', err))
@@ -71,14 +71,14 @@ self.addEventListener('fetch', event => {
               event.waitUntil(
                 caches.open(CACHE_NAME)
                   .then(cache => cache.put(event.request, copy))
-                  .catch(err => console.warn('Cache update failed', err))
+                  .catch(err => console.warn('Cache update failed for', event.request.url, err))
               );
             }
             return response;
           })
           .catch(err => {
             console.warn('Resource fetch failed', err);
-            return new Response('Offline', {
+            return new Response('Offline: resource unavailable without a connection.', {
               status: 504,
               statusText: 'Offline',
               headers: { 'Content-Type': 'text/plain' }
