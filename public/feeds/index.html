@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#f5f3ef">
+    <link rel="icon" href="../../icon-192.png" sizes="192x192">
+    <link rel="apple-touch-icon" href="../../icon-192.png">
+    <title>Feeds</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xz/fonts@1/serve/jetbrains-mono.min.css">
+    <style>
+        *{font-family:'JetBrains Mono',monospace;box-sizing:border-box;-webkit-tap-highlight-color:transparent;margin:0;padding:0}
+        html,body{width:100%;min-height:100vh;min-height:100dvh;background:linear-gradient(135deg,#f5f3ef,#e8e3db);overscroll-behavior:none}
+
+        .top-bar{position:sticky;top:0;z-index:100;background:rgba(255,255,255,.92);backdrop-filter:blur(20px);border-bottom:3px solid #6b5d52;padding:10px 12px;display:flex;align-items:center;gap:8px}
+        .top-bar a{color:#9a77ff;text-decoration:none;font-size:16px;font-weight:700;flex-shrink:0;display:flex;align-items:center}
+        .top-title{flex:1;font-size:11px;font-weight:700;color:#89530e;text-transform:uppercase;letter-spacing:1px;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .top-btn{background:none;border:none;color:#9a77ff;font-size:16px;cursor:pointer;padding:4px;flex-shrink:0;font-family:inherit}
+
+        .setup{padding:12px;display:flex;flex-direction:column;gap:10px;align-items:center}
+        .setup-card{background:rgba(255,255,255,.92);backdrop-filter:blur(20px);border:3px solid #6b5d52;outline:3px solid #c19a6b;border-radius:12px;padding:20px;box-shadow:12px 12px 0 rgba(107,93,82,.2);width:100%;max-width:400px}
+        .setup-label{color:#89530e;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px}
+        .setup-input{width:100%;padding:12px;font-family:inherit;font-size:12px;font-weight:600;color:#1a1a1a;background:#fff;border:3px solid #6b5d52;border-radius:4px;outline:none}
+        .setup-input:focus{border-color:#9a77ff;box-shadow:0 0 0 2px rgba(154,119,255,.25)}
+        .setup-input::placeholder{color:#c19a6b}
+        .setup-hint{color:#6b5d52;font-size:9px;margin-top:4px;line-height:1.5}
+
+        .btn{display:flex;align-items:center;justify-content:center;width:100%;height:48px;background:#f5f3ef;color:#89530e;font-weight:700;border:3px solid #6b5d52;outline:3px solid #c19a6b;box-shadow:6px 6px 0 #9a77ff;transition:all .12s;cursor:pointer;font-family:inherit;font-size:11px;text-transform:uppercase;letter-spacing:1px;position:relative;overflow:hidden;border-radius:0;margin-top:12px}
+        .btn:hover{background:#fff}
+        .btn:active{transform:translate(3px,3px);box-shadow:0 0 0 #9a77ff}
+        .btn:disabled{opacity:.3;cursor:not-allowed;transform:none!important;box-shadow:3px 3px 0 rgba(107,93,82,.2)!important}
+        .btn-go{background:linear-gradient(135deg,#9a77ff,#7c5ce0);color:#fff}
+
+        .loader{display:none;flex-direction:column;align-items:center;gap:8px;padding:40px 12px}
+        .loader.on{display:flex}
+        .spinner{width:32px;height:32px;border:3px solid #c19a6b;border-top-color:#9a77ff;border-radius:50%;animation:spin .8s linear infinite}
+        @keyframes spin{to{transform:rotate(360deg)}}
+        .loader-text{color:#89530e;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1px}
+
+        .feed-list{padding:8px;display:none;flex-direction:column;gap:8px}
+        .feed-list.on{display:flex}
+
+        .feed-card{background:rgba(255,255,255,.92);backdrop-filter:blur(10px);border:2px solid #c19a6b;border-radius:8px;overflow:hidden;box-shadow:4px 4px 0 rgba(107,93,82,.1)}
+        .feed-header{display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;user-select:none;-webkit-user-select:none}
+        .feed-header:active{background:rgba(154,119,255,.05)}
+        .feed-icon{width:20px;height:20px;border-radius:4px;border:1px solid #c19a6b;background:#fff;flex-shrink:0;object-fit:contain}
+        .feed-name{flex:1;font-size:11px;font-weight:700;color:#89530e;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .feed-badge{background:#9a77ff;color:#fff;font-size:8px;font-weight:700;padding:2px 6px;border-radius:10px;flex-shrink:0}
+        .feed-arrow{color:#c19a6b;font-size:12px;transition:transform .2s;flex-shrink:0}
+        .feed-card.open .feed-arrow{transform:rotate(90deg)}
+
+        .feed-entries{display:none;border-top:1px solid #e8e3db}
+        .feed-card.open .feed-entries{display:block}
+
+        .entry{display:block;padding:10px 12px;border-bottom:1px solid #f0ece6;text-decoration:none;transition:background .1s}
+        .entry:last-child{border-bottom:none}
+        .entry:active{background:rgba(154,119,255,.05)}
+        .entry-title{font-size:11px;font-weight:600;color:#6b5d52;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+        .entry-meta{font-size:9px;color:#c19a6b;margin-top:3px;font-weight:600}
+
+        .error-msg{color:#cc785c;font-size:10px;font-weight:600;text-align:center;padding:12px}
+        .empty-msg{color:#6b5d52;font-size:11px;font-weight:600;text-align:center;padding:40px 12px}
+
+        .saved-feeds{margin-top:16px}
+        .saved-label{color:#6b5d52;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px}
+        .saved-item{display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid #e8e3db}
+        .saved-item:last-child{border-bottom:none}
+        .saved-url{flex:1;font-size:9px;color:#89530e;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
+        .saved-url:hover{color:#9a77ff}
+        .saved-del{background:none;border:none;color:#cc785c;font-size:12px;cursor:pointer;padding:2px 4px;font-family:inherit;flex-shrink:0}
+    </style>
+</head>
+<body>
+    <div class="top-bar">
+        <a href="../" title="Back">←</a>
+        <div class="top-title" id="topTitle">Feeds</div>
+        <button class="top-btn" id="settingsBtn" title="Settings">⚙</button>
+    </div>
+
+    <div id="setupView" class="setup">
+        <div class="setup-card">
+            <div class="setup-label">Feed List URL</div>
+            <input type="url" id="feedUrl" class="setup-input" placeholder="https://raw.githubusercontent.com/…/feeds.txt" />
+            <div class="setup-hint">Paste a raw text URL containing RSS/Atom feed URLs, one per line.</div>
+            <button class="btn btn-go" id="loadBtn" onclick="loadFeeds()">Load Feeds</button>
+
+            <div class="saved-feeds" id="savedSection" style="display:none">
+                <div class="saved-label">Saved Lists</div>
+                <div id="savedList"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="loader" class="loader">
+        <div class="spinner"></div>
+        <div class="loader-text">Fetching feeds…</div>
+    </div>
+
+    <div id="feedList" class="feed-list"></div>
+
+    <div id="errorMsg" class="error-msg" style="display:none"></div>
+
+    <script>
+    const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
+    const STORAGE_KEY = 'feeds_saved_urls';
+    const LAST_URL_KEY = 'feeds_last_url';
+
+    let currentUrl = '';
+
+    function $(id) { return document.getElementById(id); }
+
+    function getSaved() {
+        try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch { return []; }
+    }
+    function saveTo(list) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+    }
+
+    function renderSaved() {
+        const list = getSaved();
+        const section = $('savedSection');
+        const container = $('savedList');
+        if (!list.length) { section.style.display = 'none'; return; }
+        section.style.display = '';
+        container.innerHTML = list.map((u, i) =>
+            `<div class="saved-item">
+                <div class="saved-url" onclick="loadFromSaved('${u.replace(/'/g, "\\'")}')">${u.replace(/^https?:\/\//, '').substring(0, 50)}</div>
+                <button class="saved-del" onclick="removeSaved(${i})">✕</button>
+            </div>`
+        ).join('');
+    }
+
+    function removeSaved(idx) {
+        const list = getSaved();
+        list.splice(idx, 1);
+        saveTo(list);
+        renderSaved();
+    }
+
+    function loadFromSaved(url) {
+        $('feedUrl').value = url;
+        loadFeeds();
+    }
+
+    function showSetup() {
+        $('setupView').style.display = '';
+        $('feedList').classList.remove('on');
+        $('loader').classList.remove('on');
+        $('errorMsg').style.display = 'none';
+        $('topTitle').textContent = 'Feeds';
+        renderSaved();
+    }
+
+    function showError(msg) {
+        $('loader').classList.remove('on');
+        $('errorMsg').style.display = '';
+        $('errorMsg').textContent = msg;
+    }
+
+    async function loadFeeds() {
+        const url = $('feedUrl').value.trim();
+        if (!url) return;
+
+        currentUrl = url;
+
+        // Save to recent list
+        const saved = getSaved();
+        if (!saved.includes(url)) {
+            saved.unshift(url);
+            if (saved.length > 5) saved.pop();
+            saveTo(saved);
+        }
+        localStorage.setItem(LAST_URL_KEY, url);
+
+        $('setupView').style.display = 'none';
+        $('feedList').classList.remove('on');
+        $('errorMsg').style.display = 'none';
+        $('loader').classList.add('on');
+
+        try {
+            const resp = await fetch(CORS_PROXY + encodeURIComponent(url));
+            if (!resp.ok) throw new Error('Failed to fetch feed list');
+            const text = await resp.text();
+
+            const feedUrls = text.split('\n')
+                .map(l => l.trim())
+                .filter(l => l && !l.startsWith('#') && (l.startsWith('http://') || l.startsWith('https://')));
+
+            if (!feedUrls.length) throw new Error('No valid feed URLs found in the file');
+
+            $('topTitle').textContent = `${feedUrls.length} Feeds`;
+
+            await fetchAllFeeds(feedUrls);
+        } catch (err) {
+            showError('Error: ' + err.message);
+        }
+    }
+
+    async function fetchAllFeeds(urls) {
+        const RSS_API = 'https://api.rss2json.com/v1/api.json?rss_url=';
+        const container = $('feedList');
+        container.innerHTML = '';
+
+        let loaded = 0;
+        const total = urls.length;
+        const feeds = [];
+
+        const batchSize = 3;
+        for (let i = 0; i < urls.length; i += batchSize) {
+            const batch = urls.slice(i, i + batchSize);
+            const results = await Promise.allSettled(
+                batch.map(async feedUrl => {
+                    try {
+                        const resp = await fetch(RSS_API + encodeURIComponent(feedUrl));
+                        if (!resp.ok) throw new Error('Fetch failed');
+                        const data = await resp.json();
+                        if (data.status === 'ok') return data;
+                        // Fallback: try via CORS proxy + manual parse
+                        return await fetchViaProxy(feedUrl);
+                    } catch {
+                        return await fetchViaProxy(feedUrl);
+                    }
+                })
+            );
+
+            results.forEach(r => {
+                loaded++;
+                if (r.status === 'fulfilled' && r.value) {
+                    feeds.push(r.value);
+                }
+            });
+
+            $('loader').querySelector('.loader-text').textContent =
+                `Fetching feeds… ${loaded}/${total}`;
+        }
+
+        $('loader').classList.remove('on');
+
+        if (!feeds.length) {
+            showError('Could not load any feeds. The URLs may be invalid or unreachable.');
+            return;
+        }
+
+        // Sort feeds: those with most recent entries first
+        feeds.sort((a, b) => {
+            const aDate = a.items && a.items[0] ? new Date(a.items[0].pubDate || 0) : new Date(0);
+            const bDate = b.items && b.items[0] ? new Date(b.items[0].pubDate || 0) : new Date(0);
+            return bDate - aDate;
+        });
+
+        renderFeeds(feeds);
+    }
+
+    async function fetchViaProxy(feedUrl) {
+        try {
+            const resp = await fetch(CORS_PROXY + encodeURIComponent(feedUrl));
+            if (!resp.ok) return null;
+            const text = await resp.text();
+            return parseXmlFeed(text, feedUrl);
+        } catch {
+            return null;
+        }
+    }
+
+    function parseXmlFeed(xml, feedUrl) {
+        try {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(xml, 'text/xml');
+
+            if (doc.querySelector('parsererror')) return null;
+
+            // Try RSS
+            const channel = doc.querySelector('channel');
+            if (channel) {
+                const title = channel.querySelector('title')?.textContent || feedUrl;
+                const link = channel.querySelector('link')?.textContent || '';
+                const items = Array.from(channel.querySelectorAll('item')).slice(0, 10).map(item => ({
+                    title: item.querySelector('title')?.textContent || 'Untitled',
+                    link: item.querySelector('link')?.textContent || '',
+                    pubDate: item.querySelector('pubDate')?.textContent || '',
+                    description: item.querySelector('description')?.textContent || ''
+                }));
+                return { feed: { title, link, url: feedUrl }, items };
+            }
+
+            // Try Atom
+            const atomFeed = doc.querySelector('feed');
+            if (atomFeed) {
+                const title = atomFeed.querySelector('title')?.textContent || feedUrl;
+                const link = atomFeed.querySelector('link[rel="alternate"]')?.getAttribute('href') ||
+                             atomFeed.querySelector('link')?.getAttribute('href') || '';
+                const items = Array.from(atomFeed.querySelectorAll('entry')).slice(0, 10).map(entry => ({
+                    title: entry.querySelector('title')?.textContent || 'Untitled',
+                    link: entry.querySelector('link[rel="alternate"]')?.getAttribute('href') ||
+                          entry.querySelector('link')?.getAttribute('href') || '',
+                    pubDate: entry.querySelector('published')?.textContent ||
+                             entry.querySelector('updated')?.textContent || '',
+                    description: entry.querySelector('summary')?.textContent ||
+                                 entry.querySelector('content')?.textContent || ''
+                }));
+                return { feed: { title, link, url: feedUrl }, items };
+            }
+
+            return null;
+        } catch {
+            return null;
+        }
+    }
+
+    function timeAgo(dateStr) {
+        if (!dateStr) return '';
+        const d = new Date(dateStr);
+        if (isNaN(d)) return '';
+        const s = Math.floor((Date.now() - d) / 1000);
+        if (s < 60) return 'just now';
+        if (s < 3600) return Math.floor(s / 60) + 'm ago';
+        if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+        if (s < 2592000) return Math.floor(s / 86400) + 'd ago';
+        return Math.floor(s / 2592000) + 'mo ago';
+    }
+
+    function stripHtml(html) {
+        if (!html) return '';
+        const d = document.createElement('div');
+        d.innerHTML = html;
+        return d.textContent || '';
+    }
+
+    function faviconUrl(link) {
+        if (!link) return '';
+        try {
+            const u = new URL(link);
+            return 'https://www.google.com/s2/favicons?domain=' + u.hostname + '&sz=32';
+        } catch { return ''; }
+    }
+
+    function renderFeeds(feeds) {
+        const container = $('feedList');
+        container.innerHTML = '';
+
+        feeds.forEach((data, idx) => {
+            const feed = data.feed || {};
+            const items = data.items || [];
+            const icon = faviconUrl(feed.link || feed.url);
+
+            const card = document.createElement('div');
+            card.className = 'feed-card';
+
+            const header = document.createElement('div');
+            header.className = 'feed-header';
+            header.innerHTML = `
+                ${icon ? `<img class="feed-icon" src="${icon}" alt="" onerror="this.style.display='none'">` : ''}
+                <div class="feed-name">${esc(feed.title || 'Unknown Feed')}</div>
+                ${items.length ? `<span class="feed-badge">${items.length}</span>` : ''}
+                <span class="feed-arrow">▶</span>
+            `;
+            header.onclick = () => card.classList.toggle('open');
+
+            const entries = document.createElement('div');
+            entries.className = 'feed-entries';
+            entries.innerHTML = items.map(item => `
+                <a class="entry" href="${esc(item.link)}" target="_blank" rel="noopener">
+                    <div class="entry-title">${esc(item.title)}</div>
+                    <div class="entry-meta">${timeAgo(item.pubDate)}</div>
+                </a>
+            `).join('');
+
+            card.appendChild(header);
+            card.appendChild(entries);
+            container.appendChild(card);
+        });
+
+        container.classList.add('on');
+    }
+
+    function esc(s) {
+        if (!s) return '';
+        const d = document.createElement('div');
+        d.textContent = s;
+        return d.innerHTML;
+    }
+
+    // Settings button toggles back to setup
+    $('settingsBtn').onclick = showSetup;
+
+    // Init
+    (function init() {
+        renderSaved();
+        const last = localStorage.getItem(LAST_URL_KEY);
+        if (last) $('feedUrl').value = last;
+
+        // Auto-load from URL param
+        const params = new URLSearchParams(location.search);
+        const urlParam = params.get('url');
+        if (urlParam) {
+            $('feedUrl').value = urlParam;
+            loadFeeds();
+        }
+    })();
+    </script>
+</body>
+</html>
