@@ -122,12 +122,22 @@
         const container = $('savedList');
         if (!list.length) { section.style.display = 'none'; return; }
         section.style.display = '';
-        container.innerHTML = list.map((u, i) =>
-            `<div class="saved-item">
-                <div class="saved-url" onclick="loadFromSaved('${u.replace(/'/g, "\\'")}')">${u.replace(/^https?:\/\//, '').substring(0, 50)}</div>
-                <button class="saved-del" onclick="removeSaved(${i})">✕</button>
-            </div>`
-        ).join('');
+        container.innerHTML = '';
+        list.forEach((u, i) => {
+            const item = document.createElement('div');
+            item.className = 'saved-item';
+            const urlEl = document.createElement('div');
+            urlEl.className = 'saved-url';
+            urlEl.textContent = u.replace(/^https?:\/\//, '').substring(0, 50);
+            urlEl.addEventListener('click', () => loadFromSaved(u));
+            const delBtn = document.createElement('button');
+            delBtn.className = 'saved-del';
+            delBtn.textContent = '✕';
+            delBtn.addEventListener('click', () => removeSaved(i));
+            item.appendChild(urlEl);
+            item.appendChild(delBtn);
+            container.appendChild(item);
+        });
     }
 
     function removeSaved(idx) {
@@ -321,9 +331,10 @@
 
     function stripHtml(html) {
         if (!html) return '';
-        const d = document.createElement('div');
-        d.innerHTML = html;
-        return d.textContent || '';
+        try {
+            const doc = new DOMParser().parseFromString(html, 'text/html');
+            return doc.body.textContent || '';
+        } catch { return ''; }
     }
 
     function faviconUrl(link) {
@@ -331,6 +342,15 @@
         try {
             const u = new URL(link);
             return 'https://www.google.com/s2/favicons?domain=' + u.hostname + '&sz=32';
+        } catch { return ''; }
+    }
+
+    function safeUrl(url) {
+        if (!url) return '';
+        try {
+            const u = new URL(url);
+            if (u.protocol === 'http:' || u.protocol === 'https:') return u.href;
+            return '';
         } catch { return ''; }
     }
 
@@ -348,22 +368,54 @@
 
             const header = document.createElement('div');
             header.className = 'feed-header';
-            header.innerHTML = `
-                ${icon ? `<img class="feed-icon" src="${icon}" alt="" onerror="this.style.display='none'">` : ''}
-                <div class="feed-name">${esc(feed.title || 'Unknown Feed')}</div>
-                ${items.length ? `<span class="feed-badge">${items.length}</span>` : ''}
-                <span class="feed-arrow">▶</span>
-            `;
+
+            if (icon) {
+                const img = document.createElement('img');
+                img.className = 'feed-icon';
+                img.alt = '';
+                img.src = icon;
+                img.onerror = function() { this.style.display = 'none'; };
+                header.appendChild(img);
+            }
+
+            const nameEl = document.createElement('div');
+            nameEl.className = 'feed-name';
+            nameEl.textContent = feed.title || 'Unknown Feed';
+            header.appendChild(nameEl);
+
+            if (items.length) {
+                const badge = document.createElement('span');
+                badge.className = 'feed-badge';
+                badge.textContent = items.length;
+                header.appendChild(badge);
+            }
+
+            const arrow = document.createElement('span');
+            arrow.className = 'feed-arrow';
+            arrow.textContent = '▶';
+            header.appendChild(arrow);
+
             header.onclick = () => card.classList.toggle('open');
 
             const entries = document.createElement('div');
             entries.className = 'feed-entries';
-            entries.innerHTML = items.map(item => `
-                <a class="entry" href="${esc(item.link)}" target="_blank" rel="noopener">
-                    <div class="entry-title">${esc(item.title)}</div>
-                    <div class="entry-meta">${timeAgo(item.pubDate)}</div>
-                </a>
-            `).join('');
+            items.forEach(item => {
+                const href = safeUrl(item.link);
+                const a = document.createElement('a');
+                a.className = 'entry';
+                if (href) a.href = href;
+                a.target = '_blank';
+                a.rel = 'noopener';
+                const titleEl = document.createElement('div');
+                titleEl.className = 'entry-title';
+                titleEl.textContent = item.title || 'Untitled';
+                const metaEl = document.createElement('div');
+                metaEl.className = 'entry-meta';
+                metaEl.textContent = timeAgo(item.pubDate);
+                a.appendChild(titleEl);
+                a.appendChild(metaEl);
+                entries.appendChild(a);
+            });
 
             card.appendChild(header);
             card.appendChild(entries);
@@ -371,13 +423,6 @@
         });
 
         container.classList.add('on');
-    }
-
-    function esc(s) {
-        if (!s) return '';
-        const d = document.createElement('div');
-        d.textContent = s;
-        return d.innerHTML;
     }
 
     // Settings button toggles back to setup
