@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#f5f3ef">
+    <link rel="icon" href="../../icon-192.png" sizes="192x192">
+    <link rel="apple-touch-icon" href="../../icon-192.png">
+    <title>Blog</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xz/fonts@1/serve/jetbrains-mono.min.css">
+    <style>
+        *{font-family:'JetBrains Mono',monospace;box-sizing:border-box;-webkit-tap-highlight-color:transparent;margin:0;padding:0}
+        html,body{width:100%;min-height:100vh;min-height:100dvh;background:linear-gradient(135deg,#f5f3ef,#e8e3db);overscroll-behavior:none}
+
+        .shell{width:100%;min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;align-items:center}
+        .top-bar{position:sticky;top:0;z-index:100;width:100%;background:rgba(255,255,255,.92);backdrop-filter:blur(20px);border-bottom:3px solid #6b5d52;padding:10px 12px;display:flex;align-items:center;gap:8px}
+        .top-bar a{color:#9a77ff;text-decoration:none;font-size:16px;font-weight:700;flex-shrink:0;display:flex;align-items:center}
+        .top-title{flex:1;font-size:11px;font-weight:700;color:#89530e;text-transform:uppercase;letter-spacing:1px;text-align:center}
+        .top-btn{background:none;border:none;color:#9a77ff;font-size:16px;cursor:pointer;padding:4px;flex-shrink:0;font-family:inherit}
+
+        .content{width:100%;max-width:600px;padding:8px;display:flex;flex-direction:column;gap:8px}
+
+        /* Compose Form */
+        .compose{background:rgba(255,255,255,.92);backdrop-filter:blur(20px);border:3px solid #6b5d52;outline:3px solid #c19a6b;border-radius:12px;padding:16px;box-shadow:8px 8px 0 rgba(107,93,82,.2);display:none;flex-direction:column;gap:8px}
+        .compose.on{display:flex}
+        .compose-label{color:#89530e;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px}
+        .compose-input{width:100%;padding:8px;font-family:inherit;font-size:11px;font-weight:600;color:#1a1a1a;background:#fff;border:2px solid #c19a6b;border-radius:4px;outline:none}
+        .compose-input:focus{border-color:#9a77ff;box-shadow:0 0 0 2px rgba(154,119,255,.2)}
+        .compose-textarea{width:100%;min-height:80px;padding:8px;font-family:inherit;font-size:11px;font-weight:500;color:#1a1a1a;background:#fff;border:2px solid #c19a6b;border-radius:4px;outline:none;resize:vertical;line-height:1.5}
+        .compose-textarea:focus{border-color:#9a77ff;box-shadow:0 0 0 2px rgba(154,119,255,.2)}
+        .compose-hint{color:#6b5d52;font-size:8px;line-height:1.4}
+        .compose-row{display:flex;gap:6px;align-items:center}
+        .btn-post{flex:1;height:36px;background:linear-gradient(135deg,#9a77ff,#7c5ce0);color:#fff;font-weight:700;border:2px solid #6b5d52;outline:2px solid #c19a6b;box-shadow:4px 4px 0 rgba(107,93,82,.3);transition:all .12s;cursor:pointer;font-family:inherit;font-size:10px;text-transform:uppercase;letter-spacing:1px}
+        .btn-post:hover{box-shadow:6px 6px 0 rgba(107,93,82,.3)}
+        .btn-post:active{transform:translate(2px,2px);box-shadow:0 0 0 rgba(107,93,82,.3)}
+        .btn-cancel{height:36px;padding:0 12px;background:#f5f3ef;color:#89530e;font-weight:700;border:2px solid #6b5d52;outline:2px solid #c19a6b;box-shadow:4px 4px 0 rgba(107,93,82,.2);cursor:pointer;font-family:inherit;font-size:10px;text-transform:uppercase;letter-spacing:1px;transition:all .12s}
+        .btn-cancel:active{transform:translate(2px,2px);box-shadow:0 0 0}
+
+        /* Post (imageboard style) */
+        .post{background:rgba(255,255,255,.92);border:2px solid #c19a6b;border-radius:4px;padding:0;overflow:hidden;box-shadow:3px 3px 0 rgba(107,93,82,.1)}
+        .post.op{border:3px solid #6b5d52;outline:2px solid #c19a6b;border-radius:8px;box-shadow:6px 6px 0 rgba(107,93,82,.15)}
+        .post-head{display:flex;align-items:center;flex-wrap:wrap;gap:4px;padding:6px 10px;background:linear-gradient(90deg,rgba(193,154,107,.15),rgba(154,119,255,.08));border-bottom:1px solid #e8e3db;font-size:9px}
+        .post-subject{color:#89530e;font-weight:700;font-size:10px}
+        .post-name{color:#6b5d52;font-weight:700}
+        .post-date{color:#999;font-weight:500}
+        .post-no{color:#9a77ff;font-weight:700;cursor:pointer;user-select:none}
+        .post-no:hover{text-decoration:underline}
+        .post-del{color:#cc785c;cursor:pointer;font-size:10px;margin-left:auto;background:none;border:none;font-family:inherit;padding:2px}
+        .post-body{display:flex;gap:10px;padding:10px}
+        .post-body.no-img{display:block}
+        .post-img{flex-shrink:0;max-width:150px;cursor:pointer}
+        .post-img img{display:block;max-width:150px;max-height:200px;border:2px solid #6b5d52;border-radius:2px;object-fit:contain;background:#fff}
+        .post-img.expanded img{max-width:100%;max-height:none}
+        .post-text{flex:1;font-size:11px;line-height:1.6;color:#1a1a1a;word-break:break-word;min-width:0}
+        .post-text a{color:#9a77ff;text-decoration:none}
+        .post-text a:hover{text-decoration:underline}
+
+        /* Greentext */
+        .greentext{color:#789922}
+        .quotelink{color:#9a77ff;font-weight:600;cursor:pointer;text-decoration:none}
+        .quotelink:hover{text-decoration:underline;color:#7c5ce0}
+
+        /* Replies */
+        .replies{margin-left:20px;padding-left:8px;border-left:3px solid #c19a6b;display:flex;flex-direction:column;gap:6px}
+
+        /* Thread separator */
+        .thread{display:flex;flex-direction:column;gap:6px}
+        .thread-sep{height:2px;background:linear-gradient(90deg,transparent,#c19a6b,transparent);margin:4px 0}
+
+        /* Reply indicator in compose */
+        .reply-indicator{display:none;align-items:center;gap:6px;padding:4px 8px;background:rgba(154,119,255,.08);border:1px solid #c19a6b;border-radius:4px;font-size:9px;color:#9a77ff;font-weight:600}
+        .reply-indicator.on{display:flex}
+        .reply-indicator button{background:none;border:none;color:#cc785c;cursor:pointer;font-size:11px;font-family:inherit;padding:2px}
+
+        .empty-msg{color:#6b5d52;font-size:11px;font-weight:600;text-align:center;padding:40px 12px}
+    </style>
+</head>
+<body>
+    <div class="shell">
+        <div class="top-bar">
+            <a href="../" title="Back">←</a>
+            <div class="top-title">Blog</div>
+            <button class="top-btn" id="newPostBtn" title="New Post">✎</button>
+        </div>
+
+        <div class="content">
+            <div class="compose" id="compose">
+                <div class="compose-label">New Post</div>
+                <div class="reply-indicator" id="replyIndicator">
+                    Replying to <span id="replyToNo"></span>
+                    <button id="clearReply">✕</button>
+                </div>
+                <input class="compose-input" id="postSubject" placeholder="Subject (optional)" maxlength="100" />
+                <input class="compose-input" id="postName" placeholder="Name (optional)" maxlength="50" />
+                <input class="compose-input" id="postImage" placeholder="Image URL (optional)" />
+                <textarea class="compose-textarea" id="postBody" placeholder="Post body…"></textarea>
+                <div class="compose-hint">
+                    Supports: <b>&lt;b&gt;</b> <i>&lt;i&gt;</i> <code>&lt;code&gt;</code> &lt;a href&gt; · Lines starting with &gt; become greentext · &gt;&gt;No links to posts
+                </div>
+                <div class="compose-row">
+                    <button class="btn-cancel" id="cancelBtn">Cancel</button>
+                    <button class="btn-post" id="submitBtn">Post</button>
+                </div>
+            </div>
+
+            <div id="threads"></div>
+        </div>
+    </div>
+
+    <script>
+    const STORAGE_KEY = 'blog_posts';
+    const COUNTER_KEY = 'blog_counter';
+
+    function getPosts() {
+        try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); }
+        catch { return []; }
+    }
+    function savePosts(posts) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(posts));
+    }
+    function getCounter() {
+        return parseInt(localStorage.getItem(COUNTER_KEY) || '0', 10);
+    }
+    function setCounter(n) {
+        localStorage.setItem(COUNTER_KEY, String(n));
+    }
+
+    const compose = document.getElementById('compose');
+    const postSubject = document.getElementById('postSubject');
+    const postName = document.getElementById('postName');
+    const postImage = document.getElementById('postImage');
+    const postBody = document.getElementById('postBody');
+    const replyIndicator = document.getElementById('replyIndicator');
+    const replyToNo = document.getElementById('replyToNo');
+    const clearReplyBtn = document.getElementById('clearReply');
+    const threadsContainer = document.getElementById('threads');
+
+    let replyTo = null;
+
+    document.getElementById('newPostBtn').addEventListener('click', () => {
+        replyTo = null;
+        replyIndicator.classList.remove('on');
+        compose.classList.toggle('on');
+        if (compose.classList.contains('on')) postBody.focus();
+    });
+
+    document.getElementById('cancelBtn').addEventListener('click', () => {
+        compose.classList.remove('on');
+        replyTo = null;
+        replyIndicator.classList.remove('on');
+    });
+
+    clearReplyBtn.addEventListener('click', () => {
+        replyTo = null;
+        replyIndicator.classList.remove('on');
+    });
+
+    function startReply(no) {
+        replyTo = no;
+        replyToNo.textContent = '>>' + no;
+        replyIndicator.classList.add('on');
+        compose.classList.add('on');
+        postBody.focus();
+    }
+
+    // Allowed HTML tags for sanitization
+    const ALLOWED_TAGS = ['B', 'I', 'U', 'S', 'CODE', 'EM', 'STRONG', 'A', 'BR'];
+    const ALLOWED_ATTRS = { A: ['href', 'target', 'rel'] };
+
+    function sanitizeHtml(html) {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        return sanitizeNode(doc.body);
+    }
+
+    function sanitizeNode(node) {
+        const frag = document.createDocumentFragment();
+        node.childNodes.forEach(child => {
+            if (child.nodeType === Node.TEXT_NODE) {
+                frag.appendChild(document.createTextNode(child.textContent));
+            } else if (child.nodeType === Node.ELEMENT_NODE) {
+                if (ALLOWED_TAGS.includes(child.tagName)) {
+                    const el = document.createElement(child.tagName);
+                    if (child.tagName === 'A') {
+                        const href = child.getAttribute('href') || '';
+                        if (href.startsWith('http://') || href.startsWith('https://')) {
+                            el.setAttribute('href', href);
+                            el.setAttribute('target', '_blank');
+                            el.setAttribute('rel', 'noopener');
+                        }
+                    }
+                    el.appendChild(sanitizeNode(child));
+                    frag.appendChild(el);
+                } else {
+                    // Strip tag but keep children
+                    frag.appendChild(sanitizeNode(child));
+                }
+            }
+        });
+        return frag;
+    }
+
+    function formatPostText(text) {
+        // Process line by line
+        const lines = text.split('\n');
+        const frag = document.createDocumentFragment();
+
+        lines.forEach((line, idx) => {
+            if (idx > 0) frag.appendChild(document.createElement('br'));
+
+            // Check for greentext (lines starting with >)
+            const trimmed = line.trimStart();
+
+            // Check for quote links >>123
+            if (/^>>(\d+)/.test(trimmed)) {
+                const match = trimmed.match(/^>>(\d+)/);
+                const linkNo = match[1];
+                const rest = trimmed.slice(match[0].length);
+                const a = document.createElement('a');
+                a.className = 'quotelink';
+                a.textContent = '>>' + linkNo;
+                a.href = '#p' + linkNo;
+                a.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const target = document.getElementById('p' + linkNo);
+                    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                });
+                frag.appendChild(a);
+                if (rest) {
+                    const span = document.createElement('span');
+                    span.appendChild(sanitizeHtml(rest));
+                    frag.appendChild(span);
+                }
+            } else if (trimmed.startsWith('>')) {
+                const span = document.createElement('span');
+                span.className = 'greentext';
+                span.appendChild(sanitizeHtml(line));
+                frag.appendChild(span);
+            } else {
+                frag.appendChild(sanitizeHtml(line));
+            }
+        });
+
+        return frag;
+    }
+
+    function isValidImageUrl(url) {
+        if (!url) return false;
+        try {
+            const u = new URL(url);
+            return u.protocol === 'http:' || u.protocol === 'https:';
+        } catch { return false; }
+    }
+
+    function formatDate(ts) {
+        const d = new Date(ts);
+        const pad = n => String(n).padStart(2, '0');
+        return `${pad(d.getMonth()+1)}/${pad(d.getDate())}/${String(d.getFullYear()).slice(2)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
+    // Submit post
+    document.getElementById('submitBtn').addEventListener('click', () => {
+        const body = postBody.value.trim();
+        if (!body) return;
+
+        const counter = getCounter() + 1;
+        setCounter(counter);
+
+        const post = {
+            no: counter,
+            subject: postSubject.value.trim(),
+            name: postName.value.trim() || 'Anonymous',
+            image: postImage.value.trim(),
+            body: body,
+            time: Date.now(),
+            replyTo: replyTo
+        };
+
+        const posts = getPosts();
+        posts.push(post);
+        savePosts(posts);
+
+        // Clear form
+        postSubject.value = '';
+        postImage.value = '';
+        postBody.value = '';
+        replyTo = null;
+        replyIndicator.classList.remove('on');
+        compose.classList.remove('on');
+
+        renderPosts();
+    });
+
+    function deletePost(no) {
+        let posts = getPosts();
+        posts = posts.filter(p => p.no !== no && p.replyTo !== no);
+        savePosts(posts);
+        renderPosts();
+    }
+
+    function buildPostEl(post) {
+        const el = document.createElement('div');
+        el.className = 'post' + (post.replyTo ? '' : ' op');
+        el.id = 'p' + post.no;
+
+        // Head
+        const head = document.createElement('div');
+        head.className = 'post-head';
+
+        if (post.subject) {
+            const subj = document.createElement('span');
+            subj.className = 'post-subject';
+            subj.textContent = post.subject;
+            head.appendChild(subj);
+        }
+
+        const name = document.createElement('span');
+        name.className = 'post-name';
+        name.textContent = post.name || 'Anonymous';
+        head.appendChild(name);
+
+        const date = document.createElement('span');
+        date.className = 'post-date';
+        date.textContent = formatDate(post.time);
+        head.appendChild(date);
+
+        const no = document.createElement('span');
+        no.className = 'post-no';
+        no.textContent = 'No.' + post.no;
+        no.addEventListener('click', () => startReply(post.no));
+        head.appendChild(no);
+
+        const del = document.createElement('button');
+        del.className = 'post-del';
+        del.textContent = '✕';
+        del.addEventListener('click', () => deletePost(post.no));
+        head.appendChild(del);
+
+        el.appendChild(head);
+
+        // Body
+        const body = document.createElement('div');
+        body.className = 'post-body' + (!post.image || !isValidImageUrl(post.image) ? ' no-img' : '');
+
+        if (post.image && isValidImageUrl(post.image)) {
+            const imgWrap = document.createElement('div');
+            imgWrap.className = 'post-img';
+            const img = document.createElement('img');
+            img.src = post.image;
+            img.alt = 'post image';
+            img.loading = 'lazy';
+            img.addEventListener('click', () => imgWrap.classList.toggle('expanded'));
+            img.onerror = function() { this.style.display = 'none'; };
+            imgWrap.appendChild(img);
+            body.appendChild(imgWrap);
+        }
+
+        const text = document.createElement('div');
+        text.className = 'post-text';
+        text.appendChild(formatPostText(post.body));
+        body.appendChild(text);
+
+        el.appendChild(body);
+
+        return el;
+    }
+
+    function renderPosts() {
+        const posts = getPosts();
+        threadsContainer.replaceChildren();
+
+        if (!posts.length) {
+            const empty = document.createElement('div');
+            empty.className = 'empty-msg';
+            empty.textContent = 'No posts yet. Tap ✎ to create one.';
+            threadsContainer.appendChild(empty);
+            return;
+        }
+
+        // Group into threads: top-level posts (no replyTo) with their replies
+        const topLevel = posts.filter(p => !p.replyTo);
+        const replyMap = {};
+        posts.forEach(p => {
+            if (p.replyTo) {
+                if (!replyMap[p.replyTo]) replyMap[p.replyTo] = [];
+                replyMap[p.replyTo].push(p);
+            }
+        });
+
+        // Show newest threads first
+        topLevel.reverse().forEach((op, idx) => {
+            if (idx > 0) {
+                const sep = document.createElement('div');
+                sep.className = 'thread-sep';
+                threadsContainer.appendChild(sep);
+            }
+
+            const thread = document.createElement('div');
+            thread.className = 'thread';
+
+            thread.appendChild(buildPostEl(op));
+
+            const replies = replyMap[op.no] || [];
+            if (replies.length) {
+                const repliesDiv = document.createElement('div');
+                repliesDiv.className = 'replies';
+                replies.forEach(r => repliesDiv.appendChild(buildPostEl(r)));
+                thread.appendChild(repliesDiv);
+            }
+
+            threadsContainer.appendChild(thread);
+        });
+    }
+
+    // Init
+    renderPosts();
+    </script>
+</body>
+</html>
