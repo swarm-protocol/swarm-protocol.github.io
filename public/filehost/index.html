@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#f5f3ef">
+    <link rel="icon" href="../../icon-192.png" sizes="192x192">
+    <link rel="apple-touch-icon" href="../../icon-192.png">
+    <title>File Host</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xz/fonts@1/serve/jetbrains-mono.min.css">
+    <style>
+        *{font-family:'JetBrains Mono',monospace;box-sizing:border-box;-webkit-tap-highlight-color:transparent;margin:0;padding:0}
+        html,body{width:100%;min-height:100vh;min-height:100dvh;background:linear-gradient(135deg,#f5f3ef,#e8e3db);overscroll-behavior:none}
+
+        .shell{width:100%;min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;align-items:center}
+        .top-bar{position:sticky;top:0;z-index:100;width:100%;background:rgba(255,255,255,.92);backdrop-filter:blur(20px);border-bottom:3px solid #6b5d52;padding:10px 12px;display:flex;align-items:center;gap:8px}
+        .top-bar a{color:#9a77ff;text-decoration:none;font-size:16px;font-weight:700;flex-shrink:0;display:flex;align-items:center}
+        .top-title{flex:1;font-size:11px;font-weight:700;color:#89530e;text-transform:uppercase;letter-spacing:1px;text-align:center}
+
+        .content{flex:1;width:100%;max-width:400px;padding:12px;display:flex;flex-direction:column;align-items:center;gap:10px}
+
+        .card{background:rgba(255,255,255,.92);backdrop-filter:blur(20px);border:3px solid #6b5d52;outline:3px solid #c19a6b;border-radius:12px;padding:20px;box-shadow:12px 12px 0 rgba(107,93,82,.2);width:100%}
+
+        .label{color:#89530e;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;text-align:center;margin-bottom:8px}
+
+        .drop-zone{width:100%;min-height:120px;border:3px dashed #c19a6b;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;transition:all .15s;background:rgba(245,243,239,.5);padding:16px}
+        .drop-zone:hover,.drop-zone.drag{border-color:#9a77ff;background:rgba(154,119,255,.05)}
+        .drop-zone.drag{border-style:solid}
+        .drop-icon{font-size:28px;line-height:1}
+        .drop-text{color:#89530e;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;text-align:center}
+        .drop-hint{color:#6b5d52;font-size:8px;font-weight:600;text-align:center;line-height:1.5}
+
+        input[type="file"]{display:none}
+
+        .preview{display:none;width:100%;margin-top:10px;flex-direction:column;align-items:center;gap:8px}
+        .preview.on{display:flex}
+        .preview-media{max-width:100%;max-height:160px;border:3px solid #6b5d52;outline:2px solid #c19a6b;background:#fff;border-radius:4px;object-fit:contain}
+        .preview-info{width:100%;display:flex;flex-direction:column;gap:2px}
+        .preview-name{color:#89530e;font-size:10px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .preview-size{color:#9a77ff;font-size:9px;font-weight:600}
+        .preview-type{color:#6b5d52;font-size:8px;font-weight:600}
+
+        .btn{display:flex;align-items:center;justify-content:center;width:100%;height:48px;background:#f5f3ef;color:#89530e;font-weight:700;border:3px solid #6b5d52;outline:3px solid #c19a6b;box-shadow:6px 6px 0 #9a77ff;transition:all .12s;cursor:pointer;font-family:inherit;font-size:11px;text-transform:uppercase;letter-spacing:1px;position:relative;overflow:hidden;border-radius:0;margin-top:10px}
+        .btn:hover{background:#fff}
+        .btn:active{transform:translate(3px,3px);box-shadow:0 0 0 #9a77ff}
+        .btn:disabled{opacity:.3;cursor:not-allowed;transform:none!important;box-shadow:3px 3px 0 rgba(107,93,82,.2)!important}
+        .btn-go{background:linear-gradient(135deg,#9a77ff,#7c5ce0);color:#fff}
+        .btn-clear{height:36px;font-size:9px;box-shadow:4px 4px 0 #9a77ff;outline-width:2px;margin-top:6px}
+        .btn-clear:active{box-shadow:0 0 0 #9a77ff}
+
+        progress{width:100%;height:16px;border:3px solid #6b5d52;outline:2px solid #c19a6b;background:#fff;border-radius:0;overflow:hidden;margin-top:10px;display:none}
+        progress.on{display:block}
+        progress::-webkit-progress-bar{background:#fff}
+        progress::-webkit-progress-value{background:linear-gradient(90deg,#9a77ff,#cc785c);transition:width .3s}
+        .upload-status{color:#89530e;font-size:10px;font-weight:600;text-align:center;margin-top:4px;display:none}
+        .upload-status.on{display:block}
+
+        .result{display:none;width:100%;margin-top:10px;flex-direction:column;gap:6px}
+        .result.on{display:flex}
+        .result-label{color:#89530e;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px}
+        .link-box{display:flex;align-items:stretch;width:100%;border:3px solid #3a8f6b;border-radius:6px;overflow:hidden;background:#fff}
+        .link-url{flex:1;padding:8px 10px;font-family:inherit;font-size:10px;font-weight:600;color:#1a1a1a;border:none;outline:none;background:transparent;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .link-copy{padding:8px 14px;font-family:inherit;font-size:10px;font-weight:700;color:#fff;background:#3a8f6b;border:none;border-left:2px solid #2d7356;cursor:pointer;text-transform:uppercase;letter-spacing:.5px;flex-shrink:0;transition:background .15s}
+        .link-copy:active{background:#1a4d36}
+        .result-st{font-size:9px;font-weight:600;text-align:center;color:#3a8f6b}
+
+        .error-msg{display:none;color:#cc785c;font-size:10px;font-weight:600;text-align:center;padding:4px;margin-top:6px}
+        .error-msg.on{display:block}
+
+        .history{display:none;width:100%;margin-top:6px}
+        .history.on{display:block}
+        .history-label{color:#6b5d52;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px}
+        .history-item{display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid #e8e3db}
+        .history-item:last-child{border-bottom:none}
+        .history-name{flex:1;font-size:9px;color:#89530e;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;text-decoration:none}
+        .history-name:hover{color:#9a77ff}
+        .history-del{background:none;border:none;color:#cc785c;font-size:12px;cursor:pointer;padding:2px 4px;font-family:inherit;flex-shrink:0}
+
+        .export-row{display:flex;gap:6px;margin-top:8px}
+        .btn-export{flex:1;height:32px;font-size:8px;letter-spacing:.5px;background:#f5f3ef;color:#89530e;font-weight:700;border:2px solid #6b5d52;outline:2px solid #c19a6b;box-shadow:3px 3px 0 #9a77ff;transition:all .12s;cursor:pointer;font-family:inherit;text-transform:uppercase;display:flex;align-items:center;justify-content:center;gap:4px}
+        .btn-export:hover{background:#fff}
+        .btn-export:active{transform:translate(2px,2px);box-shadow:0 0 0 #9a77ff}
+        .btn-export.xml{background:linear-gradient(135deg,#cc785c,#b85c3a);color:#fff;outline-color:#cc785c;box-shadow:3px 3px 0 #7c3a1e}
+        .btn-export.xml:active{box-shadow:0 0 0 #7c3a1e}
+    </style>
+</head>
+<body>
+    <div class="shell">
+        <div class="top-bar">
+            <a href="../" title="Back">←</a>
+            <div class="top-title">File Host</div>
+        </div>
+
+        <div class="content">
+            <div class="card">
+                <div class="label">Upload Media</div>
+
+                <div class="drop-zone" id="dropZone">
+                    <div class="drop-icon">📎</div>
+                    <div class="drop-text">Tap to select or drop file</div>
+                    <div class="drop-hint">Images · GIFs · Audio · Video<br>Max 5 MB</div>
+                </div>
+                <input type="file" id="fileInput" accept="image/*,audio/*,video/*" />
+
+                <div class="preview" id="preview">
+                    <div id="previewContainer"></div>
+                    <div class="preview-info">
+                        <div class="preview-name" id="fileName"></div>
+                        <div class="preview-size" id="fileSize"></div>
+                        <div class="preview-type" id="fileType"></div>
+                    </div>
+                </div>
+
+                <div class="error-msg" id="errorMsg"></div>
+
+                <button class="btn btn-go" id="uploadBtn" disabled>Upload</button>
+
+                <progress id="progress" value="0" max="100"></progress>
+                <div class="upload-status" id="uploadStatus"></div>
+
+                <div class="result" id="result">
+                    <div class="result-label">Hosted URL</div>
+                    <div class="link-box">
+                        <input type="text" class="link-url" id="resultUrl" readonly />
+                        <button class="link-copy" id="copyBtn">Copy</button>
+                    </div>
+                    <div class="result-st" id="resultStatus"></div>
+                </div>
+
+                <button class="btn btn-clear" id="clearBtn" style="display:none">Clear &amp; Upload Another</button>
+
+                <div class="history" id="historySection">
+                    <div class="history-label">Recent Uploads</div>
+                    <div id="historyList"></div>
+                    <div class="export-row" id="exportRow">
+                        <button class="btn-export" id="exportTxtBtn" aria-label="Export upload URLs as text file">📄 URLs .txt</button>
+                        <button class="btn-export xml" id="exportXmlBtn" aria-label="Export upload history as RSS feed">📡 RSS Feed</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    const MAX_SIZE = 5 * 1024 * 1024; // 5 MB
+    const UPLOAD_URL = 'https://0x0.st';
+    const ALLOWED_TYPES = ['image/', 'audio/', 'video/'];
+    const STORAGE_KEY = 'filehost_history';
+
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const preview = document.getElementById('preview');
+    const previewContainer = document.getElementById('previewContainer');
+    const fileNameEl = document.getElementById('fileName');
+    const fileSizeEl = document.getElementById('fileSize');
+    const fileTypeEl = document.getElementById('fileType');
+    const uploadBtn = document.getElementById('uploadBtn');
+    const progressBar = document.getElementById('progress');
+    const uploadStatus = document.getElementById('uploadStatus');
+    const result = document.getElementById('result');
+    const resultUrl = document.getElementById('resultUrl');
+    const copyBtn = document.getElementById('copyBtn');
+    const resultStatus = document.getElementById('resultStatus');
+    const clearBtn = document.getElementById('clearBtn');
+    const errorMsg = document.getElementById('errorMsg');
+    const historySection = document.getElementById('historySection');
+    const historyList = document.getElementById('historyList');
+
+    let selectedFile = null;
+
+    function formatBytes(bytes) {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+    }
+
+    function isAllowedType(type) {
+        return ALLOWED_TYPES.some(t => type.startsWith(t));
+    }
+
+    function showError(msg) {
+        errorMsg.textContent = msg;
+        errorMsg.classList.add('on');
+    }
+
+    function hideError() {
+        errorMsg.classList.remove('on');
+    }
+
+    function clearPreview() {
+        const media = previewContainer.querySelector('img, video, audio');
+        if (media && media.src && media.src.startsWith('blob:')) {
+            URL.revokeObjectURL(media.src);
+        }
+        previewContainer.replaceChildren();
+    }
+
+    function resetUI() {
+        selectedFile = null;
+        preview.classList.remove('on');
+        clearPreview();
+        uploadBtn.disabled = true;
+        progressBar.classList.remove('on');
+        progressBar.value = 0;
+        uploadStatus.classList.remove('on');
+        result.classList.remove('on');
+        clearBtn.style.display = 'none';
+        dropZone.style.display = '';
+        hideError();
+        fileInput.value = '';
+    }
+
+    function handleFile(file) {
+        hideError();
+
+        if (!file) return;
+
+        if (!isAllowedType(file.type)) {
+            showError('Only images, GIFs, audio, and video files are allowed.');
+            return;
+        }
+
+        if (file.size > MAX_SIZE) {
+            showError('File too large. Maximum size is 5 MB.');
+            return;
+        }
+
+        selectedFile = file;
+        fileNameEl.textContent = file.name;
+        fileSizeEl.textContent = formatBytes(file.size);
+        fileTypeEl.textContent = file.type;
+
+        // Show preview
+        clearPreview();
+        if (file.type.startsWith('image/')) {
+            const img = document.createElement('img');
+            img.className = 'preview-media';
+            img.src = URL.createObjectURL(file);
+            img.alt = file.name;
+            previewContainer.appendChild(img);
+        } else if (file.type.startsWith('video/')) {
+            const vid = document.createElement('video');
+            vid.className = 'preview-media';
+            vid.src = URL.createObjectURL(file);
+            vid.controls = true;
+            vid.muted = true;
+            vid.style.maxHeight = '120px';
+            previewContainer.appendChild(vid);
+        } else if (file.type.startsWith('audio/')) {
+            const aud = document.createElement('audio');
+            aud.src = URL.createObjectURL(file);
+            aud.controls = true;
+            aud.style.width = '100%';
+            aud.style.maxWidth = '280px';
+            previewContainer.appendChild(aud);
+        }
+
+        preview.classList.add('on');
+        uploadBtn.disabled = false;
+        result.classList.remove('on');
+    }
+
+    // Drop zone events
+    dropZone.addEventListener('click', () => fileInput.click());
+
+    dropZone.addEventListener('dragover', e => {
+        e.preventDefault();
+        dropZone.classList.add('drag');
+    });
+    dropZone.addEventListener('dragleave', () => {
+        dropZone.classList.remove('drag');
+    });
+    dropZone.addEventListener('drop', e => {
+        e.preventDefault();
+        dropZone.classList.remove('drag');
+        if (e.dataTransfer.files.length) {
+            handleFile(e.dataTransfer.files[0]);
+        }
+    });
+
+    fileInput.addEventListener('change', () => {
+        if (fileInput.files.length) {
+            handleFile(fileInput.files[0]);
+        }
+    });
+
+    // Upload
+    uploadBtn.addEventListener('click', async () => {
+        if (!selectedFile) return;
+
+        uploadBtn.disabled = true;
+        hideError();
+        progressBar.classList.add('on');
+        progressBar.value = 0;
+        uploadStatus.classList.remove('on');
+        result.classList.remove('on');
+        dropZone.style.display = 'none';
+
+        const formData = new FormData();
+        formData.append('file', selectedFile);
+
+        try {
+            const xhr = new XMLHttpRequest();
+
+            xhr.upload.addEventListener('progress', e => {
+                if (e.lengthComputable) {
+                    const pct = Math.round((e.loaded / e.total) * 100);
+                    progressBar.value = pct;
+                    uploadStatus.textContent = 'Uploading… ' + pct + '%';
+                    uploadStatus.classList.add('on');
+                }
+            });
+
+            const uploadPromise = new Promise((resolve, reject) => {
+                xhr.addEventListener('load', () => {
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        resolve(xhr.responseText.trim());
+                    } else {
+                        reject(new Error('Upload failed: HTTP ' + xhr.status));
+                    }
+                });
+                xhr.addEventListener('error', () => reject(new Error('Network error during upload')));
+                xhr.addEventListener('abort', () => reject(new Error('Upload aborted')));
+            });
+
+            xhr.open('POST', UPLOAD_URL);
+            xhr.send(formData);
+
+            const url = await uploadPromise;
+
+            progressBar.value = 100;
+            uploadStatus.textContent = 'Upload complete!';
+
+            resultUrl.value = url;
+            result.classList.add('on');
+            resultStatus.textContent = '';
+            clearBtn.style.display = '';
+
+            // Save to history
+            addToHistory(selectedFile.name, url, selectedFile.type, selectedFile.size);
+        } catch (err) {
+            showError(err.message);
+            uploadBtn.disabled = false;
+            dropZone.style.display = '';
+        }
+    });
+
+    // Copy button
+    copyBtn.addEventListener('click', () => {
+        const url = resultUrl.value;
+        if (!url) return;
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(url).then(() => {
+                resultStatus.textContent = 'Copied!';
+                setTimeout(() => { resultStatus.textContent = ''; }, 2000);
+            }).catch(() => {
+                fallbackCopy(url);
+            });
+        } else {
+            fallbackCopy(url);
+        }
+    });
+
+    function fallbackCopy(text) {
+        resultUrl.select();
+        resultUrl.setSelectionRange(0, text.length);
+        try {
+            document.execCommand('copy');
+            resultStatus.textContent = 'Copied!';
+        } catch {
+            resultStatus.textContent = 'Select and copy manually';
+        }
+        setTimeout(() => { resultStatus.textContent = ''; }, 2000);
+    }
+
+    // Clear button
+    clearBtn.addEventListener('click', resetUI);
+
+    // History
+    function getHistory() {
+        try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); }
+        catch { return []; }
+    }
+
+    function saveHistory(list) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+    }
+
+    function addToHistory(name, url, type, size) {
+        const list = getHistory();
+        list.unshift({ name, url, type: type || '', size: size || 0, time: Date.now() });
+        if (list.length > 10) list.pop();
+        saveHistory(list);
+        renderHistory();
+    }
+
+    function removeFromHistory(idx) {
+        const list = getHistory();
+        list.splice(idx, 1);
+        saveHistory(list);
+        renderHistory();
+    }
+
+    function renderHistory() {
+        const list = getHistory();
+        if (!list.length) {
+            historySection.classList.remove('on');
+            return;
+        }
+        historySection.classList.add('on');
+        historyList.replaceChildren();
+        list.forEach((item, i) => {
+            const row = document.createElement('div');
+            row.className = 'history-item';
+
+            const link = document.createElement('a');
+            link.className = 'history-name';
+            link.textContent = item.name;
+            try {
+                const url = new URL(item.url, window.location.origin);
+                if (url.protocol === 'http:' || url.protocol === 'https:') {
+                    link.href = url.toString();
+                    link.target = '_blank';
+                    link.rel = 'noopener';
+                }
+            } catch (e) {
+                // Invalid URL in history; leave link without href to disable navigation.
+            }
+
+            const del = document.createElement('button');
+            del.className = 'history-del';
+            del.textContent = '✕';
+            del.addEventListener('click', () => removeFromHistory(i));
+
+            row.appendChild(link);
+            row.appendChild(del);
+            historyList.appendChild(row);
+        });
+    }
+
+    // Export buttons
+    const exportTxtBtn = document.getElementById('exportTxtBtn');
+    const exportXmlBtn = document.getElementById('exportXmlBtn');
+
+    exportTxtBtn.addEventListener('click', () => {
+        const list = getHistory();
+        if (!list.length) return;
+        const text = list.map(item => item.url).join('\n') + '\n';
+        downloadFile('uploads.txt', text, 'text/plain');
+    });
+
+    exportXmlBtn.addEventListener('click', () => {
+        const list = getHistory();
+        if (!list.length) return;
+        const now = new Date().toUTCString();
+        let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
+        xml += '<rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">\n';
+        xml += '<channel>\n';
+        xml += '  <title>File Host Uploads</title>\n';
+        xml += '  <link>' + escXml(location.href) + '</link>\n';
+        xml += '  <description>Uploaded media files</description>\n';
+        xml += '  <lastBuildDate>' + escXml(now) + '</lastBuildDate>\n';
+        list.forEach(item => {
+            const ext = (item.name || '').split('.').pop().toLowerCase();
+            const mime = item.type || guessMime(ext);
+            const pubDate = item.time ? new Date(item.time).toUTCString() : now;
+            xml += '  <item>\n';
+            xml += '    <title>' + escXml(item.name || 'upload') + '</title>\n';
+            xml += '    <link>' + escXml(item.url) + '</link>\n';
+            xml += '    <guid>' + escXml(item.url) + '</guid>\n';
+            xml += '    <pubDate>' + escXml(pubDate) + '</pubDate>\n';
+            xml += '    <enclosure url="' + escXml(item.url) + '" type="' + escXml(mime) + '" length="' + (item.size || 0) + '" />\n';
+            if (mime.startsWith('image/')) {
+                xml += '    <media:content url="' + escXml(item.url) + '" type="' + escXml(mime) + '" medium="image" />\n';
+                xml += '    <media:thumbnail url="' + escXml(item.url) + '" />\n';
+            } else if (mime.startsWith('video/')) {
+                xml += '    <media:content url="' + escXml(item.url) + '" type="' + escXml(mime) + '" medium="video" />\n';
+            } else if (mime.startsWith('audio/')) {
+                xml += '    <media:content url="' + escXml(item.url) + '" type="' + escXml(mime) + '" medium="audio" />\n';
+            }
+            xml += '  </item>\n';
+        });
+        xml += '</channel>\n';
+        xml += '</rss>\n';
+        downloadFile('uploads.xml', xml, 'application/rss+xml');
+    });
+
+    function escXml(str) {
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&apos;');
+    }
+
+    function guessMime(ext) {
+        const map = {
+            jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif',
+            webp: 'image/webp', svg: 'image/svg+xml', bmp: 'image/bmp', ico: 'image/x-icon',
+            mp4: 'video/mp4', webm: 'video/webm', ogg: 'video/ogg', mov: 'video/quicktime',
+            mp3: 'audio/mpeg', wav: 'audio/wav', flac: 'audio/flac', aac: 'audio/aac',
+            oga: 'audio/ogg', m4a: 'audio/mp4'
+        };
+        return map[ext] || 'application/octet-stream';
+    }
+
+    function downloadFile(filename, content, mimeType) {
+        const blob = new Blob([content], { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+
+    // Init
+    renderHistory();
+    </script>
+</body>
+</html>
