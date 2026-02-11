@@ -39,7 +39,7 @@ self.addEventListener('fetch', event => {
           return response;
         })
         .catch(err => {
-          console.warn('Navigation fetch failed', err);
+          console.warn('Navigation fetch failed, falling back to cached index.html', err);
           return caches.match('./index.html');
         })
     );
@@ -64,7 +64,7 @@ self.addEventListener('fetch', event => {
           })
           .catch(err => {
             console.warn('Resource fetch failed', err);
-            return caches.match('./index.html');
+            return new Response('', { status: 504, statusText: 'Offline' });
           });
       })
   );
