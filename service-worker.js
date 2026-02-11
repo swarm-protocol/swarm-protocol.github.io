@@ -7,6 +7,12 @@ const CORE_ASSETS = [
   './icon-512.png'
 ];
 
+const updateCache = (request, response) =>
+  caches.open(CACHE_NAME)
+    .then(cache => cache.put(request, response)
+      .catch(err => console.warn('Cache put failed for', request.url, err)))
+    .catch(err => console.warn('Cache open failed for', request.url, err));
+
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache => cache.addAll(CORE_ASSETS))
@@ -32,9 +38,7 @@ self.addEventListener('fetch', event => {
         .then(response => {
           const copy = response.clone();
           event.waitUntil(
-              caches.open(CACHE_NAME)
-              .then(cache => cache.put(event.request, copy))
-              .catch(err => console.warn('Cache update failed for', event.request.url, err))
+            updateCache(event.request, copy)
           );
           return response;
         })
@@ -55,9 +59,7 @@ self.addEventListener('fetch', event => {
               .then(response => {
                 if (response.ok) {
                   const copy = response.clone();
-                  return caches.open(CACHE_NAME)
-                    .then(cache => cache.put(event.request, copy))
-                    .catch(err => console.warn('Cache update failed for', event.request.url, err));
+                  return updateCache(event.request, copy);
                 }
               })
               .catch(err => console.warn('Resource refresh failed', err))
@@ -69,9 +71,7 @@ self.addEventListener('fetch', event => {
             if (response.ok) {
               const copy = response.clone();
               event.waitUntil(
-                caches.open(CACHE_NAME)
-                  .then(cache => cache.put(event.request, copy))
-                  .catch(err => console.warn('Cache update failed for', event.request.url, err))
+                updateCache(event.request, copy)
               );
             }
             return response;
@@ -79,7 +79,7 @@ self.addEventListener('fetch', event => {
           .catch(err => {
             console.warn('Resource fetch failed', err);
             return new Response('Offline: resource unavailable without a connection.', {
-              status: 504,
+              status: 503,
               statusText: 'Offline',
               headers: { 'Content-Type': 'text/plain' }
             });
