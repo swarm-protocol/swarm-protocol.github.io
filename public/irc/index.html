@@ -142,6 +142,8 @@
     let ws = null;
     let nickname = '';
     let channel = '';
+    const MAX_MESSAGES = 500;
+    const REJOIN_DELAY_MS = 2000;
     let registered = false;
     let users = new Set();
     let nickColors = {};
@@ -254,7 +256,7 @@
         messagesEl.scrollTop = messagesEl.scrollHeight;
 
         // Limit messages
-        while (messagesEl.children.length > 500) {
+        while (messagesEl.children.length > MAX_MESSAGES) {
             messagesEl.removeChild(messagesEl.firstChild);
         }
     }
@@ -451,7 +453,7 @@
                     addMessage('', kicked + ' was kicked by ' + getNick(msg.prefix) + (msg.params[2] ? ' (' + msg.params[2] + ')' : ''), 'system');
                     if (kicked === nickname) {
                         addMessage('', 'You were kicked. Reconnecting…', 'system');
-                        setTimeout(() => sendRaw('JOIN ' + channel), 2000);
+                        setTimeout(() => sendRaw('JOIN ' + channel), REJOIN_DELAY_MS);
                     }
                     break;
                 }
@@ -563,7 +565,7 @@
 
         // Set nickname
         if (!nick) nick = 'user' + Math.floor(Math.random() * 9000 + 1000);
-        nick = nick.replace(/[^a-zA-Z0-9_\-\[\]\\^{}|`]/g, '').substring(0, 16);
+        nick = nick.replace(/[^a-zA-Z0-9_\-]/g, '').substring(0, 16);
         if (!nick) nick = 'user' + Math.floor(Math.random() * 9000 + 1000);
         nickname = nick;
 
