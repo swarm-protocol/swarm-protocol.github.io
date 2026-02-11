@@ -103,9 +103,42 @@
 
         .btn-row{display:flex;gap:6px;width:100%;flex-shrink:0}
         .btn-row .btn{flex:1}
+
+        /* PWA Install Dropdown */
+        .install-dropdown{position:fixed;top:12px;right:12px;z-index:9999;transform:translateY(-120%);transition:transform .3s cubic-bezier(.68,-.55,.265,1.55);max-width:280px}
+        .install-dropdown.show{transform:translateY(0)}
+        .install-card{background:rgba(255,255,255,.95);backdrop-filter:blur(20px);border:3px solid #6b5d52;outline:3px solid #c19a6b;border-radius:12px;padding:14px;box-shadow:8px 8px 0 rgba(107,93,82,.3)}
+        .install-header{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+        .install-icon{width:32px;height:32px;border-radius:6px;border:2px solid #6b5d52;background:#fff}
+        .install-title{flex:1;font-size:11px;font-weight:700;color:#89530e;text-transform:uppercase;letter-spacing:.5px}
+        .install-close{background:none;border:none;color:#6b5d52;font-size:18px;cursor:pointer;padding:0;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-weight:700;transition:color .15s}
+        .install-close:hover{color:#89530e}
+        .install-msg{font-size:10px;color:#6b5d52;margin-bottom:12px;line-height:1.5}
+        .install-actions{display:flex;gap:6px}
+        .install-btn{flex:1;height:38px;border:2px solid #6b5d52;outline:2px solid #c19a6b;border-radius:6px;font-family:inherit;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;cursor:pointer;transition:all .12s}
+        .install-btn-primary{background:linear-gradient(135deg,#9a77ff,#7c5ce0);color:#fff;box-shadow:4px 4px 0 rgba(124,92,224,.3)}
+        .install-btn-primary:active{transform:translate(2px,2px);box-shadow:0 0 0 rgba(124,92,224,.3)}
+        .install-btn-secondary{background:#f5f3ef;color:#89530e;box-shadow:4px 4px 0 rgba(107,93,82,.2)}
+        .install-btn-secondary:active{transform:translate(2px,2px);box-shadow:0 0 0 rgba(107,93,82,.2)}
     </style>
 </head>
 <body>
+    <!-- PWA Install Dropdown -->
+    <div class="install-dropdown" id="installDropdown">
+        <div class="install-card">
+            <div class="install-header">
+                <img src="icon-192.png" alt="App Icon" class="install-icon" />
+                <div class="install-title">Install App</div>
+                <button class="install-close" id="installClose" aria-label="Close">✕</button>
+            </div>
+            <div class="install-msg">Add Special Needs to your home screen for quick access and offline use.</div>
+            <div class="install-actions">
+                <button class="install-btn install-btn-secondary" id="installDismiss">Not Now</button>
+                <button class="install-btn install-btn-primary" id="installConfirm">Install</button>
+            </div>
+        </div>
+    </div>
+
     <div class="lava" id="lava"><div class="lb lb1"></div><div class="lb lb2"></div><div class="lb lb3"></div></div>
     <div class="shell" id="shell">
         <div class="card">
@@ -443,6 +476,80 @@
         $('zstat').classList.add('hidden'); $('sstat').classList.add('hidden');
         $('linkwrap').classList.add('hidden');
         go('p1');
+    });
+    </script>
+    <script>
+    // PWA Install Prompt Handler
+    const INSTALL_PROMPT_DELAY_MS = 2000;
+    let deferredPrompt = null;
+    const installDropdown = $('installDropdown');
+    const installConfirm = $('installConfirm');
+    const installDismiss = $('installDismiss');
+    const installClose = $('installClose');
+
+    // Check if user has previously dismissed
+    const hasUserDismissed = () => localStorage.getItem('pwa-install-dismissed') === 'true';
+    const setUserDismissed = () => localStorage.setItem('pwa-install-dismissed', 'true');
+    
+    // Shared dismiss handler
+    const handleDismiss = () => {
+        vibr(50);
+        installDropdown.classList.remove('show');
+        setUserDismissed();
+    };
+
+    // Listen for the beforeinstallprompt event
+    window.addEventListener('beforeinstallprompt', (e) => {
+        // Prevent the default browser install prompt
+        e.preventDefault();
+        
+        // Store the event so it can be triggered later
+        deferredPrompt = e;
+        
+        // Show the custom install dropdown if user hasn't dismissed it
+        if (!hasUserDismissed()) {
+            // Show after a short delay for better UX
+            setTimeout(() => {
+                installDropdown.classList.add('show');
+            }, INSTALL_PROMPT_DELAY_MS);
+        }
+    });
+
+    // Handle install button click
+    installConfirm.addEventListener('click', async () => {
+        if (!deferredPrompt) return;
+        
+        vibr(100);
+        
+        // Show the browser's install prompt
+        deferredPrompt.prompt();
+        
+        // Wait for the user to respond to the prompt
+        const { outcome } = await deferredPrompt.userChoice;
+        
+        console.log(`User response to install prompt: ${outcome}`);
+        
+        // Hide the dropdown
+        installDropdown.classList.remove('show');
+        
+        // Clear the deferredPrompt
+        deferredPrompt = null;
+        
+        // Mark as dismissed
+        setUserDismissed();
+    });
+
+    // Handle dismiss button click
+    installDismiss.addEventListener('click', handleDismiss);
+
+    // Handle close button click
+    installClose.addEventListener('click', handleDismiss);
+
+    // Listen for successful installation
+    window.addEventListener('appinstalled', () => {
+        console.log('PWA was installed successfully');
+        installDropdown.classList.remove('show');
+        setUserDismissed();
     });
     </script>
     <script>
