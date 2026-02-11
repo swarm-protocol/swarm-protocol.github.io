@@ -75,6 +75,13 @@
         .history-name{flex:1;font-size:9px;color:#89530e;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;text-decoration:none}
         .history-name:hover{color:#9a77ff}
         .history-del{background:none;border:none;color:#cc785c;font-size:12px;cursor:pointer;padding:2px 4px;font-family:inherit;flex-shrink:0}
+
+        .export-row{display:flex;gap:6px;margin-top:8px}
+        .btn-export{flex:1;height:32px;font-size:8px;letter-spacing:.5px;background:#f5f3ef;color:#89530e;font-weight:700;border:2px solid #6b5d52;outline:2px solid #c19a6b;box-shadow:3px 3px 0 #9a77ff;transition:all .12s;cursor:pointer;font-family:inherit;text-transform:uppercase;display:flex;align-items:center;justify-content:center;gap:4px}
+        .btn-export:hover{background:#fff}
+        .btn-export:active{transform:translate(2px,2px);box-shadow:0 0 0 #9a77ff}
+        .btn-export.xml{background:linear-gradient(135deg,#cc785c,#b85c3a);color:#fff;outline-color:#cc785c;box-shadow:3px 3px 0 #7c3a1e}
+        .btn-export.xml:active{box-shadow:0 0 0 #7c3a1e}
     </style>
 </head>
 <body>
@@ -125,6 +132,10 @@
                 <div class="history" id="historySection">
                     <div class="history-label">Recent Uploads</div>
                     <div id="historyList"></div>
+                    <div class="export-row" id="exportRow">
+                        <button class="btn-export" id="exportTxtBtn">📄 URLs .txt</button>
+                        <button class="btn-export xml" id="exportXmlBtn">📡 RSS Feed</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -326,7 +337,7 @@
             clearBtn.style.display = '';
 
             // Save to history
-            addToHistory(selectedFile.name, url);
+            addToHistory(selectedFile.name, url, selectedFile.type);
         } catch (err) {
             showError(err.message);
             uploadBtn.disabled = false;
@@ -376,9 +387,9 @@
         localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
     }
 
-    function addToHistory(name, url) {
+    function addToHistory(name, url, type) {
         const list = getHistory();
-        list.unshift({ name, url, time: Date.now() });
+        list.unshift({ name, url, type: type || '', time: Date.now() });
         if (list.length > 10) list.pop();
         saveHistory(list);
         renderHistory();
@@ -419,6 +430,84 @@
             row.appendChild(del);
             historyList.appendChild(row);
         });
+    }
+
+    // Export buttons
+    const exportTxtBtn = document.getElementById('exportTxtBtn');
+    const exportXmlBtn = document.getElementById('exportXmlBtn');
+
+    exportTxtBtn.addEventListener('click', () => {
+        const list = getHistory();
+        if (!list.length) return;
+        const text = list.map(item => item.url).join('\n') + '\n';
+        downloadFile('uploads.txt', text, 'text/plain');
+    });
+
+    exportXmlBtn.addEventListener('click', () => {
+        const list = getHistory();
+        if (!list.length) return;
+        const now = new Date().toUTCString();
+        let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
+        xml += '<rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">\n';
+        xml += '<channel>\n';
+        xml += '  <title>File Host Uploads</title>\n';
+        xml += '  <description>Uploaded media files</description>\n';
+        xml += '  <lastBuildDate>' + escXml(now) + '</lastBuildDate>\n';
+        list.forEach(item => {
+            const ext = (item.name || '').split('.').pop().toLowerCase();
+            const mime = item.type || guessMime(ext);
+            const pubDate = item.time ? new Date(item.time).toUTCString() : now;
+            xml += '  <item>\n';
+            xml += '    <title>' + escXml(item.name || 'upload') + '</title>\n';
+            xml += '    <link>' + escXml(item.url) + '</link>\n';
+            xml += '    <guid>' + escXml(item.url) + '</guid>\n';
+            xml += '    <pubDate>' + escXml(pubDate) + '</pubDate>\n';
+            xml += '    <enclosure url="' + escXml(item.url) + '" type="' + escXml(mime) + '" />\n';
+            if (mime.startsWith('image/')) {
+                xml += '    <media:content url="' + escXml(item.url) + '" type="' + escXml(mime) + '" medium="image" />\n';
+                xml += '    <media:thumbnail url="' + escXml(item.url) + '" />\n';
+            } else if (mime.startsWith('video/')) {
+                xml += '    <media:content url="' + escXml(item.url) + '" type="' + escXml(mime) + '" medium="video" />\n';
+            } else if (mime.startsWith('audio/')) {
+                xml += '    <media:content url="' + escXml(item.url) + '" type="' + escXml(mime) + '" medium="audio" />\n';
+            }
+            xml += '  </item>\n';
+        });
+        xml += '</channel>\n';
+        xml += '</rss>\n';
+        downloadFile('uploads.xml', xml, 'application/rss+xml');
+    });
+
+    function escXml(str) {
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&apos;');
+    }
+
+    function guessMime(ext) {
+        const map = {
+            jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif',
+            webp: 'image/webp', svg: 'image/svg+xml', bmp: 'image/bmp', ico: 'image/x-icon',
+            mp4: 'video/mp4', webm: 'video/webm', ogg: 'video/ogg', mov: 'video/quicktime',
+            mp3: 'audio/mpeg', wav: 'audio/wav', flac: 'audio/flac', aac: 'audio/aac',
+            oga: 'audio/ogg', m4a: 'audio/mp4'
+        };
+        return map[ext] || 'application/octet-stream';
+    }
+
+    function downloadFile(filename, content, mimeType) {
+        const blob = new Blob([content], { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     }
 
     // Init
