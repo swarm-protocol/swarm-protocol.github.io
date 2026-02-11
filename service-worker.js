@@ -78,8 +78,8 @@ self.addEventListener('fetch', event => {
           })
           .catch(err => {
             console.warn('Resource fetch failed', err);
-            return new Response('Resource unavailable offline.', {
-              status: 503,
+            return new Response('Resource unavailable: offline.', {
+              status: 408,
               statusText: 'Offline',
               headers: { 'Content-Type': 'text/plain' }
             });
