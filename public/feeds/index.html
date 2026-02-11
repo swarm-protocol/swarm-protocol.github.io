@@ -74,7 +74,7 @@
     <div class="top-bar">
         <a href="../" title="Back">←</a>
         <div class="top-title" id="topTitle">Feeds</div>
-        <button class="top-btn" id="settingsBtn" title="Settings">⚙</button>
+        <button class="top-btn" id="settingsBtn" title="Settings" aria-label="Settings">⚙</button>
     </div>
 
     <div id="setupView" class="setup">
@@ -170,6 +170,19 @@
     async function loadFeeds() {
         const url = $('feedUrl').value.trim();
         if (!url) return;
+
+        let parsedUrl;
+        try {
+            parsedUrl = new URL(url);
+        } catch (e) {
+            showError('Please enter a valid URL starting with http:// or https://');
+            return;
+        }
+
+        if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+            showError('Only http:// and https:// URLs are allowed');
+            return;
+        }
 
         currentUrl = url;
 
@@ -327,14 +340,6 @@
         if (s < 86400) return Math.floor(s / 3600) + 'h ago';
         if (s < 2592000) return Math.floor(s / 86400) + 'd ago';
         return Math.floor(s / 2592000) + 'mo ago';
-    }
-
-    function stripHtml(html) {
-        if (!html) return '';
-        try {
-            const doc = new DOMParser().parseFromString(html, 'text/html');
-            return doc.body.textContent || '';
-        } catch { return ''; }
     }
 
     function faviconUrl(link) {

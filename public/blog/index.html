@@ -80,7 +80,7 @@
         <div class="top-bar">
             <a href="../" title="Back">←</a>
             <div class="top-title">Blog</div>
-            <button class="top-btn" id="newPostBtn" title="New Post">✎</button>
+            <button class="top-btn" id="newPostBtn" title="New Post" aria-label="New Post">✎</button>
         </div>
 
         <div class="content">
@@ -165,7 +165,6 @@
 
     // Allowed HTML tags for sanitization
     const ALLOWED_TAGS = ['B', 'I', 'U', 'S', 'CODE', 'EM', 'STRONG', 'A', 'BR'];
-    const ALLOWED_ATTRS = { A: ['href', 'target', 'rel'] };
 
     function sanitizeHtml(html) {
         const parser = new DOMParser();
@@ -292,10 +291,21 @@
         renderPosts();
     });
 
-    // Delete a post and its replies (cascading delete by design)
+    // Delete a post and all its descendants (cascading delete)
     function deletePost(no) {
         let posts = getPosts();
-        posts = posts.filter(p => p.no !== no && p.replyTo !== no);
+        const toDelete = new Set([no]);
+        let changed = true;
+        while (changed) {
+            changed = false;
+            for (const p of posts) {
+                if (p.replyTo != null && toDelete.has(p.replyTo) && !toDelete.has(p.no)) {
+                    toDelete.add(p.no);
+                    changed = true;
+                }
+            }
+        }
+        posts = posts.filter(p => !toDelete.has(p.no));
         savePosts(posts);
         renderPosts();
     }
@@ -402,13 +412,19 @@
 
             thread.appendChild(buildPostEl(op));
 
-            const replies = replyMap[op.no] || [];
-            if (replies.length) {
+            // Render replies recursively so nested threads appear
+            function renderReplies(parentNo, container) {
+                const replies = replyMap[parentNo] || [];
+                if (!replies.length) return;
                 const repliesDiv = document.createElement('div');
                 repliesDiv.className = 'replies';
-                replies.forEach(r => repliesDiv.appendChild(buildPostEl(r)));
-                thread.appendChild(repliesDiv);
+                replies.forEach(r => {
+                    repliesDiv.appendChild(buildPostEl(r));
+                    renderReplies(r.no, repliesDiv);
+                });
+                container.appendChild(repliesDiv);
             }
+            renderReplies(op.no, thread);
 
             threadsContainer.appendChild(thread);
         });

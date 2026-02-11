@@ -417,9 +417,16 @@
             const link = document.createElement('a');
             link.className = 'history-name';
             link.textContent = item.name;
-            link.href = item.url;
-            link.target = '_blank';
-            link.rel = 'noopener';
+            try {
+                const url = new URL(item.url, window.location.origin);
+                if (url.protocol === 'http:' || url.protocol === 'https:') {
+                    link.href = url.toString();
+                    link.target = '_blank';
+                    link.rel = 'noopener';
+                }
+            } catch (e) {
+                // Invalid URL in history; leave link without href to disable navigation.
+            }
 
             const del = document.createElement('button');
             del.className = 'history-del';

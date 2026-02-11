@@ -51,8 +51,8 @@ self.addEventListener('fetch', event => {
           return response;
         })
         .catch(err => {
-          console.warn('Navigation fetch failed, falling back to cached index.html', err);
-          return caches.match('./index.html');
+          console.warn('Navigation fetch failed, falling back to cache', err);
+          return caches.match(event.request).then(cached => cached || caches.match('./index.html'));
         })
     );
     return;

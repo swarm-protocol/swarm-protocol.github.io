@@ -30,7 +30,7 @@ const initCodeEditor = () => {
 
     statsEl = byId('stats');
     editor.on('change', () => {
-        statsEl.innerHTML = `Length: ${editor.getValue().length} |  Lines: ${editor['doc'].size}`;
+        statsEl.textContent = `Length: ${editor.getValue().length} |  Lines: ${editor.getDoc().lineCount()}`;
         hideCopyBar();
     });
 };
@@ -74,16 +74,16 @@ const initCode = () => {
 
 const handleLegacyUrl = () => {
     const lang = new URLSearchParams(window.location.search).get('lang');
-    const base = `${location.protocol}//${location.host}`;
+    const base = `${location.origin}${location.pathname}`;
     if (location.hash.charAt(5) === '-') {
         const hashedLang = location.hash.substr(1, 4);
         const newLang = CodeMirror.modeInfo.find((e) => hash(e.name) === hashedLang);
         const queryParams = newLang ? '?l=' + shorten(newLang.name) : '';
-        location.replace(`${base}/${queryParams}#${location.hash.substr(6)}`);
+        location.replace(`${base}${queryParams}#${location.hash.substr(6)}`);
         throw new Error('waiting for page to reload');
     }
     if (lang) {
-        location.replace(`${base}/${'?l=' + shorten(lang)}${location.hash}`);
+        location.replace(`${base}${'?l=' + shorten(lang)}${location.hash}`);
         throw new Error('waiting for page to reload');
     }
 };
@@ -154,7 +154,9 @@ const enableLineWrapping = () => {
 };
 
 const openInNewTab = () => {
-    window.open(location.href.replace(/[?&]readonly/, ''));
+    const url = new URL(window.location.href);
+    url.searchParams.delete('readonly');
+    window.open(url.toString());
 };
 
 // Build a shareable URL
@@ -166,7 +168,7 @@ const buildUrl = (rawData, mode) => {
         return `[NoPaste snippet](${url})`;
     }
     if (mode === 'iframe') {
-        const height = editor['doc'].height + 45;
+        const height = editor.getScrollInfo().height + 45;
         return `<iframe width="100%" height="${height}" frameborder="0" src="${url}"></iframe>`;
     }
     return url;
