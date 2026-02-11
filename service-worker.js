@@ -1,7 +1,10 @@
-const CACHE_NAME = 'special-needs-pwa-v2';
+const CACHE_NAME = 'special-needs-pwa-v3';
 const CORE_ASSETS = [
   './',
   './index.html',
+  './manifest.json',
+  './icon-192.png',
+  './icon-512.png',
   './public/index.html',
   './public/emotes/index.html',
   './public/emotes/manifest.json',
