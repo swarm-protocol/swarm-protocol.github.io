@@ -10,7 +10,6 @@
             rel="stylesheet"
             type="text/css"
             href="https://cdn.jsdelivr.net/combine/
-npm/bootstrap@4.6.1/dist/css/bootstrap-grid.min.css,
 npm/slim-select@1.27.1/dist/slimselect.min.css,
 npm/codemirror@5.65.5/lib/codemirror.min.css,
 npm/codemirror@5.65.5/addon/scroll/simplescrollbars.css,
@@ -23,89 +22,59 @@ npm/microtip@0.2.2/microtip.min.css
         <link rel="icon" href="../../icon-192.png" sizes="192x192" />
         <link rel="apple-touch-icon" href="../../icon-192.png" />
     </head>
-    <body class="m-0">
+    <body>
         <script>
             const readOnly = window.location !== window.parent.location || new URLSearchParams(window.location.search).has('readonly');
             if (readOnly) {
                 document.body.classList.add('readonly');
             }
         </script>
-        <div id="copy" class="container-fluid hidden shadow-bottom hide-readonly">
-            <div class="row my-1">
-                <div class="col my-1">
-                    <input type="text" value="copy me" id="copy-link" class="px-2" onclick="this.setSelectionRange(0, this.value.length)" />
-                </div>
-                <div class="col-auto my-1">
-                    <button class="clipboard py-1 px-2 mx-1" id="copy-btn" data-clipboard-target="#copy-link" type="button">
-                        Copy
-                    </button>
-                    <button class="py-1 px-2 mx-1" onclick="hideCopyBar(false)" type="button">Cancel</button>
-                </div>
+        <div class="top-bar hide-readonly">
+            <a href="../" title="Back">←</a>
+            <div class="top-title">NoPaste</div>
+            <div class="top-controls">
+                <select id="language"></select>
+                <button
+                    onclick="enableLineWrapping()"
+                    type="button"
+                    id="enable-line-wrapping"
+                    aria-label="Enable line wrapping"
+                    data-microtip-position="bottom"
+                    role="tooltip"
+                >
+                    <span class="icon-notes"></span>
+                </button>
+                <button
+                    onclick="disableLineWrapping()"
+                    type="button"
+                    id="disable-line-wrapping"
+                    aria-label="Disable line wrapping"
+                    data-microtip-position="bottom"
+                    role="tooltip"
+                    class="hidden"
+                >
+                    <span class="icon-wrap-text"></span>
+                </button>
+                <button class="np-btn" onclick="generateLink('url')" type="button">Link</button>
+                <button class="np-btn" onclick="generateLink('markdown')" type="button">Markdown</button>
+                <button class="np-btn" onclick="generateLink('iframe')" type="button">Embed</button>
+                <button class="np-btn" type="button" data-micromodal-trigger="description-modal">About</button>
             </div>
         </div>
-        <div id="controls" class="container-fluid shadow-bottom hide-readonly">
-            <div class="row align-items-center justify-content-end my-1">
-                <div class="col-auto mb-1">
-                    <h1 class="my-0"><span>{</span> NoPaste <span>}</span></h1>
-                </div>
-                <div class="col-auto">
-                    <a
-                        href="javascript:void(0)"
-                        class="mx-3"
-                        aria-label="Click to know more about NoPaste"
-                        data-microtip-position="bottom"
-                        role="tooltip"
-                        data-micromodal-trigger="description-modal"
-                        >About</a
-                    >
-                    <a href="https://github.com/bokub/nopaste" rel="noopener" target="_blank" class="mx-3">Source</a>
-                    <a href="../../" class="mx-3">Home</a>
-                </div>
-                <div class="col"></div>
-                <div class="col-auto my-1">
-                    <select id="language"></select>
-                </div>
-                <div class="col-auto">
-                    <button
-                        onclick="enableLineWrapping()"
-                        type="button"
-                        id="enable-line-wrapping"
-                        aria-label="Enable line wrapping"
-                        data-microtip-position="bottom"
-                        role="tooltip"
-                    >
-                        <span class="icon-notes"></span>
-                    </button>
-                    <button
-                        onclick="disableLineWrapping()"
-                        type="button"
-                        id="disable-line-wrapping"
-                        aria-label="Disable line wrapping"
-                        data-microtip-position="bottom"
-                        role="tooltip"
-                        class="hidden"
-                    >
-                        <span class="icon-wrap-text"></span>
-                    </button>
-                </div>
-                <div class="col-auto">
-                    <button class="py-1 px-2 mx-0 my-1" onclick="generateLink('url')" type="button">
-                        Generate link
-                    </button>
-                    <button class="py-1 px-2 mx-1 my-1" onclick="generateLink('markdown')" type="button">
-                        Generate markdown
-                    </button>
-                    <button class="py-1 px-2 mx-0 my-1" onclick="generateLink('iframe')" type="button">Embed</button>
-                </div>
+        <div id="copy" class="copy-bar hidden shadow-bottom hide-readonly">
+            <div class="copy-inner">
+                <input type="text" value="copy me" id="copy-link" onclick="this.setSelectionRange(0, this.value.length)" />
+                <button class="clipboard np-btn" id="copy-btn" data-clipboard-target="#copy-link" type="button">Copy</button>
+                <button class="np-btn" onclick="hideCopyBar(false)" type="button">Cancel</button>
             </div>
         </div>
         <div id="progress"></div>
         <div id="editor"></div>
-        <footer id="footer" class="shadow-top container-fluid">
-            <div class="row my-1">
-                <div class="col mono hide-readonly" id="stats">Length: 0 | Lines: 1</div>
-                <div class="col mono show-readonly">Powered by NoPaste</div>
-                <div class="col-auto mono show-readonly">
+        <footer id="footer" class="shadow-top">
+            <div class="footer-inner">
+                <div class="mono hide-readonly" id="stats">Length: 0 | Lines: 1</div>
+                <div class="mono show-readonly">Powered by NoPaste</div>
+                <div class="mono show-readonly footer-edit">
                     <a href="javascript:void(0)" onclick="openInNewTab()">
                         <span class="icon-edit"></span>
                         Edit
@@ -115,9 +84,9 @@ npm/microtip@0.2.2/microtip.min.css
         </footer>
         <div id="description-modal" data-micromodal-close class="modal">
             <div tabindex="-1" class="modal-overlay">
-                <div role="dialog" class="modal-content shadow-bottom p-3 m-3">
+                <div role="dialog" class="modal-content shadow-bottom">
                     <div class="modal-close" data-micromodal-close><span class="icon-close"></span></div>
-                    <h2 class="mt-0">What is NoPaste?</h2>
+                    <h2>What is NoPaste?</h2>
 
                     <span class="pink">NoPaste</span> is an open-source website similar to Pastebin where you can store any piece of code,
                     and generate links for easy sharing<br /><br />
@@ -148,7 +117,7 @@ npm/microtip@0.2.2/microtip.min.css
         </div>
         <div id="error-modal" class="modal" data-micromodal-close>
             <div tabindex="-1" class="modal-overlay">
-                <div role="dialog" class="modal-content shadow-bottom p-3 m-3">
+                <div role="dialog" class="modal-content shadow-bottom">
                     <div class="modal-close" data-micromodal-close><span class="icon-close"></span></div>
                     NoPaste cannot decompress the URL<br /><br />
                     It's possible that you clicked on an invalid link<br /><br />
