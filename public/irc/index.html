@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#f5f3ef">
+    <link rel="icon" href="../../icon-192.png" sizes="192x192">
+    <link rel="apple-touch-icon" href="../../icon-192.png">
+    <title>IRC</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xz/fonts@1/serve/jetbrains-mono.min.css">
+    <style>
+        *{font-family:'JetBrains Mono',monospace;box-sizing:border-box;-webkit-tap-highlight-color:transparent;margin:0;padding:0}
+        html,body{width:100%;height:100vh;height:100dvh;background:linear-gradient(135deg,#f5f3ef,#e8e3db);overscroll-behavior:none;overflow:hidden}
+
+        .shell{width:100%;height:100vh;height:100dvh;display:flex;flex-direction:column}
+
+        .top-bar{flex-shrink:0;z-index:100;width:100%;background:rgba(255,255,255,.92);backdrop-filter:blur(20px);border-bottom:3px solid #6b5d52;padding:8px 12px;display:flex;align-items:center;gap:8px}
+        .top-bar a{color:#9a77ff;text-decoration:none;font-size:16px;font-weight:700;flex-shrink:0;display:flex;align-items:center}
+        .top-title{flex:1;font-size:11px;font-weight:700;color:#89530e;text-transform:uppercase;letter-spacing:1px;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .top-status{font-size:8px;font-weight:600;padding:2px 6px;border-radius:8px;flex-shrink:0}
+        .top-status.off{background:#cc785c;color:#fff}
+        .top-status.on{background:#3a8f6b;color:#fff}
+        .top-status.connecting{background:#c19a6b;color:#fff;animation:pulse 1.2s ease-in-out infinite}
+        @keyframes pulse{0%,100%{opacity:.6}50%{opacity:1}}
+
+        /* Connect view */
+        .connect-view{flex:1;display:flex;align-items:center;justify-content:center;padding:12px}
+        .connect-view.hidden{display:none}
+        .connect-card{background:rgba(255,255,255,.92);backdrop-filter:blur(20px);border:3px solid #6b5d52;outline:3px solid #c19a6b;border-radius:12px;padding:20px;box-shadow:12px 12px 0 rgba(107,93,82,.2);width:100%;max-width:360px}
+        .connect-label{color:#89530e;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:4px;margin-top:10px}
+        .connect-label:first-child{margin-top:0}
+        .connect-input{width:100%;padding:10px;font-family:inherit;font-size:11px;font-weight:600;color:#1a1a1a;background:#fff;border:2px solid #c19a6b;border-radius:4px;outline:none}
+        .connect-input:focus{border-color:#9a77ff;box-shadow:0 0 0 2px rgba(154,119,255,.2)}
+        .connect-hint{color:#6b5d52;font-size:8px;margin-top:2px;line-height:1.4}
+        .connect-title{color:#89530e;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;text-align:center;margin-bottom:12px}
+        .btn-connect{display:flex;align-items:center;justify-content:center;width:100%;height:44px;background:linear-gradient(135deg,#9a77ff,#7c5ce0);color:#fff;font-weight:700;border:2px solid #6b5d52;outline:2px solid #c19a6b;box-shadow:4px 4px 0 rgba(107,93,82,.3);transition:all .12s;cursor:pointer;font-family:inherit;font-size:10px;text-transform:uppercase;letter-spacing:1px;margin-top:14px;border-radius:0}
+        .btn-connect:hover{box-shadow:6px 6px 0 rgba(107,93,82,.3)}
+        .btn-connect:active{transform:translate(2px,2px);box-shadow:0 0 0}
+        .btn-connect:disabled{opacity:.4;cursor:not-allowed;transform:none!important}
+
+        /* Chat view */
+        .chat-view{flex:1;display:none;flex-direction:column;min-height:0}
+        .chat-view.active{display:flex}
+
+        .channel-bar{flex-shrink:0;background:rgba(255,255,255,.8);border-bottom:1px solid #e8e3db;padding:4px 12px;display:flex;align-items:center;gap:6px;font-size:9px}
+        .channel-name{color:#9a77ff;font-weight:700;font-size:10px}
+        .channel-topic{color:#6b5d52;font-weight:500;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .user-count{color:#89530e;font-weight:700;font-size:9px;flex-shrink:0}
+
+        .messages{flex:1;overflow-y:auto;padding:6px 10px;display:flex;flex-direction:column;gap:1px;min-height:0;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;scrollbar-width:thin}
+        .messages::-webkit-scrollbar{width:4px}
+        .messages::-webkit-scrollbar-thumb{background:#c19a6b;border-radius:2px}
+
+        .msg{display:flex;gap:6px;padding:2px 0;font-size:11px;line-height:1.5;word-break:break-word}
+        .msg-time{color:#999;font-size:9px;flex-shrink:0;min-width:36px;font-weight:500;padding-top:1px}
+        .msg-nick{font-weight:700;flex-shrink:0;cursor:default}
+        .msg-text{flex:1;color:#1a1a1a;min-width:0}
+        .msg-text a{color:#9a77ff;text-decoration:none}
+        .msg-text a:hover{text-decoration:underline}
+        .msg.system{opacity:.6;font-style:italic}
+        .msg.system .msg-nick{color:#6b5d52}
+        .msg.action .msg-text{font-style:italic;color:#6b5d52}
+        .msg.self .msg-nick{color:#9a77ff!important}
+        .msg.notice .msg-nick{color:#cc785c!important}
+        .msg.notice .msg-text{color:#cc785c}
+
+        .input-bar{flex-shrink:0;display:flex;align-items:stretch;border-top:3px solid #6b5d52;background:rgba(255,255,255,.95)}
+        .input-nick{padding:8px 10px;font-family:inherit;font-size:11px;font-weight:700;color:#9a77ff;background:rgba(154,119,255,.05);border:none;border-right:2px solid #c19a6b;flex-shrink:0;min-width:0;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .input-msg{flex:1;padding:8px 10px;font-family:inherit;font-size:11px;font-weight:500;color:#1a1a1a;border:none;outline:none;background:transparent;min-width:0}
+        .input-msg::placeholder{color:#c19a6b}
+        .btn-send{padding:8px 14px;font-family:inherit;font-size:10px;font-weight:700;color:#fff;background:linear-gradient(135deg,#9a77ff,#7c5ce0);border:none;border-left:2px solid #6b5d52;cursor:pointer;text-transform:uppercase;letter-spacing:.5px;flex-shrink:0;transition:background .15s}
+        .btn-send:active{background:#5a3cc0}
+
+        .error-toast{display:none;position:fixed;bottom:60px;left:50%;transform:translateX(-50%);background:#cc785c;color:#fff;font-size:9px;font-weight:600;padding:6px 14px;border-radius:6px;z-index:200;white-space:nowrap}
+        .error-toast.on{display:block}
+    </style>
+</head>
+<body>
+    <div class="shell">
+        <div class="top-bar">
+            <a href="../" title="Back">←</a>
+            <div class="top-title" id="topTitle">IRC</div>
+            <div class="top-status off" id="statusBadge">Offline</div>
+        </div>
+
+        <div class="connect-view" id="connectView">
+            <div class="connect-card">
+                <div class="connect-title">Connect to IRC</div>
+
+                <div class="connect-label">Server (WebSocket)</div>
+                <input class="connect-input" id="serverInput" value="wss://web.libera.chat" placeholder="wss://irc.example.com:6697" />
+                <div class="connect-hint">WebSocket URL (wss:// or ws://)</div>
+
+                <div class="connect-label">Channel</div>
+                <input class="connect-input" id="channelInput" value="#general" placeholder="#channel" maxlength="50" />
+
+                <div class="connect-label">Nickname</div>
+                <input class="connect-input" id="nickInput" placeholder="Anonymous" maxlength="16" />
+                <div class="connect-hint">Letters, numbers, and underscores only</div>
+
+                <button class="btn-connect" id="connectBtn">Connect</button>
+            </div>
+        </div>
+
+        <div class="chat-view" id="chatView">
+            <div class="channel-bar">
+                <span class="channel-name" id="channelLabel">#general</span>
+                <span class="channel-topic" id="channelTopic"></span>
+                <span class="user-count" id="userCount"></span>
+            </div>
+            <div class="messages" id="messages"></div>
+            <div class="input-bar">
+                <div class="input-nick" id="nickDisplay"></div>
+                <input class="input-msg" id="msgInput" placeholder="Type a message…" autocomplete="off" />
+                <button class="btn-send" id="sendBtn">Send</button>
+            </div>
+        </div>
+
+        <div class="error-toast" id="errorToast"></div>
+    </div>
+
+    <script>
+    const SETTINGS_KEY = 'irc_settings';
+
+    const serverInput = document.getElementById('serverInput');
+    const channelInput = document.getElementById('channelInput');
+    const nickInput = document.getElementById('nickInput');
+    const connectBtn = document.getElementById('connectBtn');
+    const connectView = document.getElementById('connectView');
+    const chatView = document.getElementById('chatView');
+    const topTitle = document.getElementById('topTitle');
+    const statusBadge = document.getElementById('statusBadge');
+    const channelLabel = document.getElementById('channelLabel');
+    const channelTopic = document.getElementById('channelTopic');
+    const userCount = document.getElementById('userCount');
+    const messagesEl = document.getElementById('messages');
+    const nickDisplay = document.getElementById('nickDisplay');
+    const msgInput = document.getElementById('msgInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const errorToast = document.getElementById('errorToast');
+
+    let ws = null;
+    let nickname = '';
+    let channel = '';
+    let registered = false;
+    let users = new Set();
+    let nickColors = {};
+
+    // Load saved settings
+    function loadSettings() {
+        try {
+            const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
+            if (s.server) serverInput.value = s.server;
+            if (s.channel) channelInput.value = s.channel;
+            if (s.nick) nickInput.value = s.nick;
+        } catch {}
+    }
+
+    function saveSettings() {
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify({
+            server: serverInput.value,
+            channel: channelInput.value,
+            nick: nickInput.value
+        }));
+    }
+
+    function setStatus(state) {
+        statusBadge.className = 'top-status ' + state;
+        statusBadge.textContent = state === 'on' ? 'Connected' : state === 'connecting' ? 'Connecting…' : 'Offline';
+    }
+
+    function showError(msg) {
+        errorToast.textContent = msg;
+        errorToast.classList.add('on');
+        setTimeout(() => errorToast.classList.remove('on'), 4000);
+    }
+
+    // Nick color hashing
+    function nickColor(nick) {
+        if (nickColors[nick]) return nickColors[nick];
+        const colors = ['#9a77ff','#cc785c','#3a8f6b','#89530e','#7c5ce0','#b85c3a','#c19a6b','#6b5d52','#2d7356','#d4764e'];
+        let hash = 0;
+        for (let i = 0; i < nick.length; i++) {
+            hash = nick.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        const color = colors[Math.abs(hash) % colors.length];
+        nickColors[nick] = color;
+        return color;
+    }
+
+    function formatTime(date) {
+        const h = String(date.getHours()).padStart(2, '0');
+        const m = String(date.getMinutes()).padStart(2, '0');
+        return h + ':' + m;
+    }
+
+    function escText(text) {
+        const d = document.createElement('div');
+        d.textContent = text;
+        return d.innerHTML;
+    }
+
+    function linkify(text) {
+        const escaped = escText(text);
+        return escaped.replace(
+            /(https?:\/\/[^\s<>"'&]+)/g,
+            function(match) {
+                try {
+                    const u = new URL(match);
+                    if (u.protocol === 'http:' || u.protocol === 'https:') {
+                        return '<a href="' + escText(match) + '" target="_blank" rel="noopener">' + escText(match) + '</a>';
+                    }
+                } catch {}
+                return match;
+            }
+        );
+    }
+
+    function addMessage(nick, text, type) {
+        const div = document.createElement('div');
+        div.className = 'msg' + (type ? ' ' + type : '') + (nick === nickname ? ' self' : '');
+
+        const time = document.createElement('span');
+        time.className = 'msg-time';
+        time.textContent = formatTime(new Date());
+
+        const nickEl = document.createElement('span');
+        nickEl.className = 'msg-nick';
+
+        if (type === 'system') {
+            nickEl.textContent = '•';
+        } else if (type === 'action') {
+            nickEl.textContent = '* ' + nick;
+            nickEl.style.color = nickColor(nick);
+        } else {
+            nickEl.textContent = nick;
+            nickEl.style.color = nickColor(nick);
+        }
+
+        const textEl = document.createElement('span');
+        textEl.className = 'msg-text';
+        if (type === 'system' || type === 'notice') {
+            textEl.textContent = text;
+        } else {
+            textEl.innerHTML = linkify(text);
+        }
+
+        div.appendChild(time);
+        div.appendChild(nickEl);
+        div.appendChild(textEl);
+        messagesEl.appendChild(div);
+
+        // Auto-scroll
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+
+        // Limit messages
+        while (messagesEl.children.length > 500) {
+            messagesEl.removeChild(messagesEl.firstChild);
+        }
+    }
+
+    function updateUserCount() {
+        userCount.textContent = users.size > 0 ? users.size + ' users' : '';
+    }
+
+    // IRC send
+    function sendRaw(data) {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(data + '\r\n');
+        }
+    }
+
+    function sendMessage(text) {
+        if (!text || !registered) return;
+
+        if (text.startsWith('/')) {
+            const parts = text.substring(1).split(' ');
+            const cmd = parts[0].toUpperCase();
+            const args = parts.slice(1).join(' ');
+
+            switch (cmd) {
+                case 'ME':
+                    sendRaw('PRIVMSG ' + channel + ' :\x01ACTION ' + args + '\x01');
+                    addMessage(nickname, args, 'action');
+                    break;
+                case 'NICK':
+                    if (args) sendRaw('NICK ' + args.split(' ')[0]);
+                    break;
+                case 'TOPIC':
+                    sendRaw('TOPIC ' + channel + (args ? ' :' + args : ''));
+                    break;
+                case 'QUIT':
+                    sendRaw('QUIT :' + (args || 'Goodbye'));
+                    break;
+                case 'MSG':
+                case 'PRIVMSG': {
+                    const msgParts = args.split(' ');
+                    const target = msgParts[0];
+                    const msg = msgParts.slice(1).join(' ');
+                    if (target && msg) {
+                        sendRaw('PRIVMSG ' + target + ' :' + msg);
+                        addMessage(nickname, '→ ' + target + ': ' + msg, '');
+                    }
+                    break;
+                }
+                default:
+                    sendRaw(text.substring(1));
+                    break;
+            }
+        } else {
+            sendRaw('PRIVMSG ' + channel + ' :' + text);
+            addMessage(nickname, text, '');
+        }
+    }
+
+    // IRC message parser
+    function parseIrcMessage(raw) {
+        let tags = {};
+        let prefix = '';
+        let command = '';
+        let params = [];
+        let idx = 0;
+
+        // Parse tags
+        if (raw.startsWith('@')) {
+            const spaceIdx = raw.indexOf(' ');
+            const tagStr = raw.substring(1, spaceIdx);
+            tagStr.split(';').forEach(t => {
+                const eq = t.indexOf('=');
+                if (eq !== -1) {
+                    tags[t.substring(0, eq)] = t.substring(eq + 1);
+                } else {
+                    tags[t] = true;
+                }
+            });
+            idx = spaceIdx + 1;
+        }
+
+        // Skip leading spaces
+        while (raw[idx] === ' ') idx++;
+
+        // Parse prefix
+        if (raw[idx] === ':') {
+            const spaceIdx = raw.indexOf(' ', idx);
+            prefix = raw.substring(idx + 1, spaceIdx);
+            idx = spaceIdx + 1;
+        }
+
+        while (raw[idx] === ' ') idx++;
+
+        // Parse command
+        const cmdEnd = raw.indexOf(' ', idx);
+        if (cmdEnd === -1) {
+            command = raw.substring(idx);
+        } else {
+            command = raw.substring(idx, cmdEnd);
+            idx = cmdEnd + 1;
+
+            // Parse params
+            while (idx < raw.length) {
+                while (raw[idx] === ' ') idx++;
+                if (idx >= raw.length) break;
+                if (raw[idx] === ':') {
+                    params.push(raw.substring(idx + 1));
+                    break;
+                }
+                const nextSpace = raw.indexOf(' ', idx);
+                if (nextSpace === -1) {
+                    params.push(raw.substring(idx));
+                    break;
+                }
+                params.push(raw.substring(idx, nextSpace));
+                idx = nextSpace + 1;
+            }
+        }
+
+        return { tags, prefix, command, params };
+    }
+
+    function getNick(prefix) {
+        const bang = prefix.indexOf('!');
+        return bang !== -1 ? prefix.substring(0, bang) : prefix;
+    }
+
+    // Handle IRC messages
+    function handleMessage(raw) {
+        const lines = raw.split('\r\n').filter(l => l.length > 0);
+        lines.forEach(line => {
+            const msg = parseIrcMessage(line);
+
+            switch (msg.command) {
+                case 'PING':
+                    sendRaw('PONG :' + (msg.params[0] || ''));
+                    break;
+
+                case 'PRIVMSG': {
+                    const sender = getNick(msg.prefix);
+                    const text = msg.params[1] || '';
+                    const target = msg.params[0];
+
+                    if (text.startsWith('\x01ACTION ') && text.endsWith('\x01')) {
+                        addMessage(sender, text.slice(8, -1), 'action');
+                    } else if (target.toLowerCase() === channel.toLowerCase()) {
+                        addMessage(sender, text, '');
+                    } else {
+                        addMessage(sender, '(private) ' + text, 'notice');
+                    }
+                    break;
+                }
+
+                case 'NOTICE': {
+                    const sender = getNick(msg.prefix) || 'Server';
+                    const text = msg.params[1] || msg.params[0] || '';
+                    addMessage(sender, text, 'notice');
+                    break;
+                }
+
+                case 'JOIN': {
+                    const who = getNick(msg.prefix);
+                    const chan = msg.params[0];
+                    if (who === nickname) {
+                        addMessage('', 'You have joined ' + chan, 'system');
+                    } else {
+                        users.add(who);
+                        updateUserCount();
+                        addMessage('', who + ' joined ' + chan, 'system');
+                    }
+                    break;
+                }
+
+                case 'PART': {
+                    const who = getNick(msg.prefix);
+                    users.delete(who);
+                    updateUserCount();
+                    addMessage('', who + ' left ' + (msg.params[1] ? '(' + msg.params[1] + ')' : ''), 'system');
+                    break;
+                }
+
+                case 'QUIT': {
+                    const who = getNick(msg.prefix);
+                    users.delete(who);
+                    updateUserCount();
+                    addMessage('', who + ' quit' + (msg.params[0] ? ' (' + msg.params[0] + ')' : ''), 'system');
+                    break;
+                }
+
+                case 'KICK': {
+                    const kicked = msg.params[1];
+                    users.delete(kicked);
+                    updateUserCount();
+                    addMessage('', kicked + ' was kicked by ' + getNick(msg.prefix) + (msg.params[2] ? ' (' + msg.params[2] + ')' : ''), 'system');
+                    if (kicked === nickname) {
+                        addMessage('', 'You were kicked. Reconnecting…', 'system');
+                        setTimeout(() => sendRaw('JOIN ' + channel), 2000);
+                    }
+                    break;
+                }
+
+                case 'NICK': {
+                    const oldNick = getNick(msg.prefix);
+                    const newNick = msg.params[0];
+                    users.delete(oldNick);
+                    users.add(newNick);
+                    updateUserCount();
+                    if (oldNick === nickname) {
+                        nickname = newNick;
+                        nickDisplay.textContent = newNick;
+                    }
+                    addMessage('', oldNick + ' is now known as ' + newNick, 'system');
+                    break;
+                }
+
+                case '332': // RPL_TOPIC
+                    channelTopic.textContent = msg.params[2] || '';
+                    break;
+
+                case '353': { // RPL_NAMREPLY
+                    const names = (msg.params[3] || '').split(' ').filter(n => n);
+                    names.forEach(n => {
+                        // Strip mode prefixes (@, +, %, ~, &)
+                        const clean = n.replace(/^[~&@%+]+/, '');
+                        if (clean) users.add(clean);
+                    });
+                    updateUserCount();
+                    break;
+                }
+
+                case '366': // RPL_ENDOFNAMES
+                    updateUserCount();
+                    break;
+
+                case '001': // RPL_WELCOME
+                    registered = true;
+                    addMessage('', msg.params[1] || 'Connected!', 'system');
+                    setStatus('on');
+                    sendRaw('JOIN ' + channel);
+                    break;
+
+                case '433': // ERR_NICKNAMEINUSE
+                    nickname = nickname + '_';
+                    nickDisplay.textContent = nickname;
+                    sendRaw('NICK ' + nickname);
+                    addMessage('', 'Nickname in use, trying ' + nickname, 'system');
+                    break;
+
+                case '005': // RPL_ISUPPORT
+                case '002': // RPL_YOURHOST
+                case '003': // RPL_CREATED
+                case '004': // RPL_MYINFO
+                case '375': // RPL_MOTDSTART
+                case '372': // RPL_MOTD
+                case '376': // RPL_ENDOFMOTD
+                case '251': case '252': case '253': case '254': case '255': // Lusers
+                case '265': case '266': // Local/global users
+                    break;
+
+                case 'ERROR':
+                    addMessage('', 'Server: ' + (msg.params[0] || 'Error'), 'system');
+                    break;
+
+                case 'CAP':
+                    // Handle capability negotiation
+                    if (msg.params[1] === 'LS') {
+                        sendRaw('CAP END');
+                    }
+                    break;
+
+                default:
+                    // Show unknown numerics with useful info
+                    if (/^\d{3}$/.test(msg.command) && msg.params.length > 1) {
+                        const text = msg.params.slice(1).join(' ');
+                        if (text) addMessage('', text, 'system');
+                    }
+                    break;
+            }
+        });
+    }
+
+    // Connect
+    function connect() {
+        const server = serverInput.value.trim();
+        const chan = channelInput.value.trim();
+        let nick = nickInput.value.trim();
+
+        if (!server) { showError('Enter a server URL'); return; }
+        if (!chan) { showError('Enter a channel'); return; }
+
+        // Validate server URL
+        try {
+            const url = new URL(server);
+            if (url.protocol !== 'ws:' && url.protocol !== 'wss:') {
+                showError('Server must use ws:// or wss://');
+                return;
+            }
+        } catch {
+            showError('Invalid server URL');
+            return;
+        }
+
+        // Clean channel name
+        if (!chan.startsWith('#')) channel = '#' + chan;
+        else channel = chan;
+
+        // Set nickname
+        if (!nick) nick = 'user' + Math.floor(Math.random() * 9000 + 1000);
+        nick = nick.replace(/[^a-zA-Z0-9_\-\[\]\\^{}|`]/g, '').substring(0, 16);
+        if (!nick) nick = 'user' + Math.floor(Math.random() * 9000 + 1000);
+        nickname = nick;
+
+        saveSettings();
+
+        connectBtn.disabled = true;
+        setStatus('connecting');
+
+        try {
+            ws = new WebSocket(server);
+        } catch (e) {
+            showError('Failed to connect');
+            connectBtn.disabled = false;
+            setStatus('off');
+            return;
+        }
+
+        ws.onopen = () => {
+            sendRaw('CAP LS 302');
+            sendRaw('NICK ' + nickname);
+            sendRaw('USER ' + nickname + ' 0 * :' + nickname);
+
+            connectView.classList.add('hidden');
+            chatView.classList.add('active');
+            channelLabel.textContent = channel;
+            nickDisplay.textContent = nickname;
+            topTitle.textContent = channel;
+            msgInput.focus();
+
+            users.clear();
+            messagesEl.replaceChildren();
+            addMessage('', 'Connecting to ' + server + '…', 'system');
+        };
+
+        ws.onmessage = (event) => {
+            handleMessage(event.data);
+        };
+
+        ws.onerror = () => {
+            showError('Connection error');
+        };
+
+        ws.onclose = () => {
+            setStatus('off');
+            registered = false;
+            connectBtn.disabled = false;
+            addMessage('', 'Disconnected from server', 'system');
+        };
+    }
+
+    function disconnect() {
+        if (ws) {
+            sendRaw('QUIT :Leaving');
+            ws.close();
+            ws = null;
+        }
+        registered = false;
+        setStatus('off');
+        connectView.classList.remove('hidden');
+        chatView.classList.remove('active');
+        connectBtn.disabled = false;
+    }
+
+    // Events
+    connectBtn.addEventListener('click', connect);
+
+    nickInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter') connect();
+    });
+
+    sendBtn.addEventListener('click', () => {
+        const text = msgInput.value.trim();
+        if (text) {
+            sendMessage(text);
+            msgInput.value = '';
+        }
+    });
+
+    msgInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+            const text = msgInput.value.trim();
+            if (text) {
+                sendMessage(text);
+                msgInput.value = '';
+            }
+        }
+    });
+
+    // Back button disconnects
+    document.querySelector('.top-bar a').addEventListener('click', e => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            e.preventDefault();
+            disconnect();
+        }
+    });
+
+    // Init
+    loadSettings();
+    </script>
+</body>
+</html>

@@ -11,7 +11,8 @@ const CORE_ASSETS = [
   './public/nopaste/script.js',
   './public/feeds/index.html',
   './public/filehost/index.html',
-  './public/blog/index.html'
+  './public/blog/index.html',
+  './public/irc/index.html'
 ];
 
 const updateCache = (request, response) =>
