@@ -176,10 +176,18 @@
         errorMsg.classList.remove('on');
     }
 
+    function clearPreview() {
+        const media = previewContainer.querySelector('img, video, audio');
+        if (media && media.src && media.src.startsWith('blob:')) {
+            URL.revokeObjectURL(media.src);
+        }
+        previewContainer.replaceChildren();
+    }
+
     function resetUI() {
         selectedFile = null;
         preview.classList.remove('on');
-        previewContainer.innerHTML = '';
+        clearPreview();
         uploadBtn.disabled = true;
         progressBar.classList.remove('on');
         progressBar.value = 0;
@@ -212,7 +220,7 @@
         fileTypeEl.textContent = file.type;
 
         // Show preview
-        previewContainer.innerHTML = '';
+        clearPreview();
         if (file.type.startsWith('image/')) {
             const img = document.createElement('img');
             img.className = 'preview-media';
@@ -390,7 +398,7 @@
             return;
         }
         historySection.classList.add('on');
-        historyList.innerHTML = '';
+        historyList.replaceChildren();
         list.forEach((item, i) => {
             const row = document.createElement('div');
             row.className = 'history-item';
