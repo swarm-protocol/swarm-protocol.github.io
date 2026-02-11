@@ -1,19 +1,10 @@
-const CACHE_NAME = 'special-needs-pwa-v2';
+const CACHE_NAME = 'emotes-pwa-v1';
 const CORE_ASSETS = [
   './',
   './index.html',
-  './public/index.html',
-  './public/emotes/index.html',
-  './public/emotes/manifest.json',
-  './public/emotes/icon-192.png',
-  './public/emotes/icon-512.png',
-  './public/nopaste/index.html',
-  './public/nopaste/style.css',
-  './public/nopaste/script.js',
-  './public/feeds/index.html',
-  './public/filehost/index.html',
-  './public/blog/index.html',
-  './public/irc/index.html'
+  './manifest.json',
+  './icon-192.png',
+  './icon-512.png'
 ];
 
 const updateCache = (request, response) =>
