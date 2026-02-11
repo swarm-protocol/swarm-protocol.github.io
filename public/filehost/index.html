@@ -316,10 +316,10 @@
                 xhr.addEventListener('load', () => {
                     if (xhr.status >= 200 && xhr.status < 300) {
                         const text = xhr.responseText.trim();
-                        if (text && text.startsWith('https://')) {
+                        if (text && (text.startsWith('https://files.catbox.moe/') || text.startsWith('https://litter.catbox.moe/'))) {
                             resolve(text);
                         } else {
-                            reject(new Error('Upload failed: ' + (text || 'empty response')));
+                            reject(new Error('Upload failed. Please try again or choose a different file.'));
                         }
                     } else {
                         reject(new Error('Upload failed: HTTP ' + xhr.status));
