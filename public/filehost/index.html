@@ -98,7 +98,7 @@
                 <div class="drop-zone" id="dropZone">
                     <div class="drop-icon">📎</div>
                     <div class="drop-text">Tap to select or drop file</div>
-                    <div class="drop-hint">Images · GIFs · Audio · Video<br>Max 5 MB</div>
+                    <div class="drop-hint">Images · GIFs · Audio · Video<br>Max 200 MB</div>
                 </div>
                 <input type="file" id="fileInput" accept="image/*,audio/*,video/*" />
 
@@ -142,8 +142,8 @@
     </div>
 
     <script>
-    const MAX_SIZE = 5 * 1024 * 1024; // 5 MB
-    const UPLOAD_URL = 'https://file.io';
+    const MAX_SIZE = 200 * 1024 * 1024; // 200 MB
+    const UPLOAD_URL = 'https://catbox.moe/user/api.php';
     const ALLOWED_TYPES = ['image/', 'audio/', 'video/'];
     const STORAGE_KEY = 'filehost_history';
 
@@ -221,7 +221,7 @@
         }
 
         if (file.size > MAX_SIZE) {
-            showError('File too large. Maximum size is 5 MB.');
+            showError('File too large. Maximum size is 200 MB.');
             return;
         }
 
@@ -297,7 +297,8 @@
         dropZone.style.display = 'none';
 
         const formData = new FormData();
-        formData.append('file', selectedFile);
+        formData.append('reqtype', 'fileupload');
+        formData.append('fileToUpload', selectedFile);
 
         try {
             const xhr = new XMLHttpRequest();
@@ -314,21 +315,11 @@
             const uploadPromise = new Promise((resolve, reject) => {
                 xhr.addEventListener('load', () => {
                     if (xhr.status >= 200 && xhr.status < 300) {
-                        try {
-                            const data = JSON.parse(xhr.responseText);
-                            if (data.success && data.link) {
-                                resolve(data.link);
-                            } else {
-                                reject(new Error('Upload failed: ' + (data.message || 'unknown error')));
-                            }
-                        } catch {
-                            // Fallback: treat response as plain text URL
-                            const text = xhr.responseText.trim();
-                            if (text) {
-                                resolve(text);
-                            } else {
-                                reject(new Error('Upload failed: empty response'));
-                            }
+                        const text = xhr.responseText.trim();
+                        if (text && text.startsWith('https://')) {
+                            resolve(text);
+                        } else {
+                            reject(new Error('Upload failed: ' + (text || 'empty response')));
                         }
                     } else {
                         reject(new Error('Upload failed: HTTP ' + xhr.status));
