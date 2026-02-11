@@ -480,6 +480,7 @@
     </script>
     <script>
     // PWA Install Prompt Handler
+    const INSTALL_PROMPT_DELAY_MS = 2000;
     let deferredPrompt = null;
     const installDropdown = $('installDropdown');
     const installConfirm = $('installConfirm');
@@ -489,6 +490,13 @@
     // Check if user has previously dismissed
     const hasUserDismissed = () => localStorage.getItem('pwa-install-dismissed') === 'true';
     const setUserDismissed = () => localStorage.setItem('pwa-install-dismissed', 'true');
+    
+    // Shared dismiss handler
+    const handleDismiss = () => {
+        vibr(50);
+        installDropdown.classList.remove('show');
+        setUserDismissed();
+    };
 
     // Listen for the beforeinstallprompt event
     window.addEventListener('beforeinstallprompt', (e) => {
@@ -503,7 +511,7 @@
             // Show after a short delay for better UX
             setTimeout(() => {
                 installDropdown.classList.add('show');
-            }, 2000);
+            }, INSTALL_PROMPT_DELAY_MS);
         }
     });
 
@@ -519,7 +527,7 @@
         // Wait for the user to respond to the prompt
         const { outcome } = await deferredPrompt.userChoice;
         
-        console.log(`User ${outcome} the install prompt`);
+        console.log(`User response to install prompt: ${outcome}`);
         
         // Hide the dropdown
         installDropdown.classList.remove('show');
@@ -532,18 +540,10 @@
     });
 
     // Handle dismiss button click
-    installDismiss.addEventListener('click', () => {
-        vibr(50);
-        installDropdown.classList.remove('show');
-        setUserDismissed();
-    });
+    installDismiss.addEventListener('click', handleDismiss);
 
     // Handle close button click
-    installClose.addEventListener('click', () => {
-        vibr(50);
-        installDropdown.classList.remove('show');
-        setUserDismissed();
-    });
+    installClose.addEventListener('click', handleDismiss);
 
     // Listen for successful installation
     window.addEventListener('appinstalled', () => {
