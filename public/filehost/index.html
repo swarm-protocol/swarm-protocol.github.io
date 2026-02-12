@@ -143,7 +143,11 @@
 
     <script>
     const MAX_SIZE = 200 * 1024 * 1024; // 200 MB
-    const UPLOAD_URL = 'https://catbox.moe/user/api.php';
+    const CATBOX_API = 'https://catbox.moe/user/api.php';
+    const CORS_PROXIES = [
+        url => 'https://corsproxy.io/?' + encodeURIComponent(url),
+        url => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
+    ];
     const ALLOWED_TYPES = ['image/', 'audio/', 'video/'];
     const STORAGE_KEY = 'filehost_history';
 
@@ -284,23 +288,13 @@
         }
     });
 
-    // Upload
-    uploadBtn.addEventListener('click', async () => {
-        if (!selectedFile) return;
+    // Upload via CORS proxy with fallback
+    function attemptUpload(file, proxyFn) {
+        return new Promise((resolve, reject) => {
+            const formData = new FormData();
+            formData.append('reqtype', 'fileupload');
+            formData.append('fileToUpload', file);
 
-        uploadBtn.disabled = true;
-        hideError();
-        progressBar.classList.add('on');
-        progressBar.value = 0;
-        uploadStatus.classList.remove('on');
-        result.classList.remove('on');
-        dropZone.style.display = 'none';
-
-        const formData = new FormData();
-        formData.append('reqtype', 'fileupload');
-        formData.append('fileToUpload', selectedFile);
-
-        try {
             const xhr = new XMLHttpRequest();
 
             xhr.upload.addEventListener('progress', e => {
@@ -312,43 +306,61 @@
                 }
             });
 
-            const uploadPromise = new Promise((resolve, reject) => {
-                xhr.addEventListener('load', () => {
-                    if (xhr.status >= 200 && xhr.status < 300) {
-                        const text = xhr.responseText.trim();
-                        if (text && (text.startsWith('https://files.catbox.moe/') || text.startsWith('https://litter.catbox.moe/'))) {
-                            resolve(text);
-                        } else {
-                            reject(new Error('Upload failed. Please try again or choose a different file.'));
-                        }
+            xhr.addEventListener('load', () => {
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    const text = xhr.responseText.trim();
+                    if (text && (text.startsWith('https://files.catbox.moe/') || text.startsWith('https://litter.catbox.moe/'))) {
+                        resolve(text);
                     } else {
-                        reject(new Error('Upload failed: HTTP ' + xhr.status));
+                        reject(new Error('Upload failed. Unexpected response from server.'));
                     }
-                });
-                xhr.addEventListener('error', () => reject(new Error('Network error during upload')));
-                xhr.addEventListener('abort', () => reject(new Error('Upload aborted')));
+                } else {
+                    reject(new Error('Upload failed: HTTP ' + xhr.status));
+                }
             });
+            xhr.addEventListener('error', () => reject(new Error('Network error during upload')));
+            xhr.addEventListener('abort', () => reject(new Error('Upload aborted')));
 
-            xhr.open('POST', UPLOAD_URL);
+            xhr.open('POST', proxyFn(CATBOX_API));
             xhr.send(formData);
+        });
+    }
 
-            const url = await uploadPromise;
+    uploadBtn.addEventListener('click', async () => {
+        if (!selectedFile) return;
 
-            progressBar.value = 100;
-            uploadStatus.textContent = 'Upload complete!';
+        uploadBtn.disabled = true;
+        hideError();
+        progressBar.classList.add('on');
+        progressBar.value = 0;
+        uploadStatus.classList.remove('on');
+        result.classList.remove('on');
+        dropZone.style.display = 'none';
 
-            resultUrl.value = url;
-            result.classList.add('on');
-            resultStatus.textContent = '';
-            clearBtn.style.display = '';
+        let lastErr;
+        for (const proxyFn of CORS_PROXIES) {
+            try {
+                progressBar.value = 0;
+                const url = await attemptUpload(selectedFile, proxyFn);
 
-            // Save to history
-            addToHistory(selectedFile.name, url, selectedFile.type, selectedFile.size);
-        } catch (err) {
-            showError(err.message);
-            uploadBtn.disabled = false;
-            dropZone.style.display = '';
+                progressBar.value = 100;
+                uploadStatus.textContent = 'Upload complete!';
+
+                resultUrl.value = url;
+                result.classList.add('on');
+                resultStatus.textContent = '';
+                clearBtn.style.display = '';
+
+                addToHistory(selectedFile.name, url, selectedFile.type, selectedFile.size);
+                return;
+            } catch (err) {
+                lastErr = err;
+            }
         }
+
+        showError(lastErr ? lastErr.message : 'Upload failed. All proxies exhausted.');
+        uploadBtn.disabled = false;
+        dropZone.style.display = '';
     });
 
     // Copy button
