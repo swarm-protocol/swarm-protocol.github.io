@@ -21,7 +21,6 @@
         .top-status.off{background:#cc785c;color:#fff}
         .top-status.on{background:#3a8f6b;color:#fff}
         .top-status.connecting{background:#c19a6b;color:#fff;animation:pulse 1.2s ease-in-out infinite}
-        .top-status.reconnecting{background:#c19a6b;color:#fff;animation:pulse 1.2s ease-in-out infinite}
         @keyframes pulse{0%,100%{opacity:.6}50%{opacity:1}}
 
         /* Connect view */
@@ -79,34 +78,30 @@
 <body>
     <div class="shell">
         <div class="top-bar">
-            <a href="../" title="Back">←</a>
+            <a href="../" title="Back">&#8592;</a>
             <div class="top-title" id="topTitle">IRC</div>
             <div class="top-status off" id="statusBadge">Offline</div>
         </div>
 
         <div class="connect-view" id="connectView">
             <div class="connect-card">
-                <div class="connect-title">Connect to IRC</div>
-
-                <div class="connect-label">Server (WebSocket)</div>
-                <input class="connect-input" id="serverInput" value="wss://irc-websocket.digitalirc.org:8433" placeholder="wss://irc.example.com:6697" />
-                <div class="connect-hint">WebSocket URL (wss:// or ws://)</div>
+                <div class="connect-title">Join Channel</div>
 
                 <div class="connect-label">Channel</div>
                 <input class="connect-input" id="channelInput" value="#general" placeholder="#channel" maxlength="50" />
 
                 <div class="connect-label">Nickname</div>
                 <input class="connect-input" id="nickInput" placeholder="Anonymous" maxlength="16" />
-                <div class="connect-hint">Letters, numbers, and underscores only</div>
+                <div class="connect-hint">Peer-to-peer &middot; No server needed &middot; WebRTC</div>
 
-                <button class="btn-connect" id="connectBtn">Connect</button>
+                <button class="btn-connect" id="connectBtn">Join</button>
             </div>
         </div>
 
         <div class="chat-view" id="chatView">
             <div class="channel-bar">
                 <span class="channel-name" id="channelLabel">#general</span>
-                <span class="channel-topic" id="channelTopic"></span>
+                <span class="channel-topic" id="channelTopic">p2p</span>
                 <span class="user-count" id="userCount"></span>
             </div>
             <div class="messages" id="messages"></div>
@@ -120,11 +115,18 @@
         <div class="error-toast" id="errorToast"></div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/bugout/bugout.min.js"></script>
     <script>
     const SETTINGS_KEY = 'irc_settings';
     const STATE_KEY = 'irc_connection_state';
+    const SWARM_PREFIX = 'swarm-irc-';
+    const MAX_MESSAGES = 500;
+    const DEFAULT_TRACKERS = [
+        'wss://tracker.openwebtorrent.com',
+        'wss://tracker.btorrent.xyz',
+        'wss://tracker.fastcast.nz',
+    ];
 
-    const serverInput = document.getElementById('serverInput');
     const channelInput = document.getElementById('channelInput');
     const nickInput = document.getElementById('nickInput');
     const connectBtn = document.getElementById('connectBtn');
@@ -141,39 +143,17 @@
     const sendBtn = document.getElementById('sendBtn');
     const errorToast = document.getElementById('errorToast');
 
-    let ws = null;
+    let bugout = null;
     let nickname = '';
     let channel = '';
-    const MAX_MESSAGES = 500;
-    const REJOIN_DELAY_MS = 2000;
-    let registered = false;
-    let users = new Set();
+    let connected = false;
+    let peers = new Map(); // address -> { nick }
     let nickColors = {};
 
-    // --- Reconnection state ---
-    let intentionalDisconnect = false;
-    let reconnectAttempts = 0;
-    const MAX_RECONNECT_ATTEMPTS = 20;
-    const BASE_RECONNECT_DELAY = 1000;  // 1s initial
-    const MAX_RECONNECT_DELAY = 30000;  // 30s cap
-    let reconnectTimer = null;
-
-    // --- Keepalive state ---
-    let keepaliveInterval = null;
-    const KEEPALIVE_INTERVAL_MS = 30000;  // ping every 30s
-    let lastPong = 0;
-    const PONG_TIMEOUT_MS = 60000;  // consider dead if no pong in 60s
-    let pongCheckInterval = null;
-
-    // --- Connection timeout ---
-    let connectTimeout = null;
-    const CONNECT_TIMEOUT_MS = 15000;  // 15s to establish connection
-
-    // Load saved settings
+    // --- Settings persistence ---
     function loadSettings() {
         try {
             const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
-            if (s.server) serverInput.value = s.server;
             if (s.channel) channelInput.value = s.channel;
             if (s.nick) nickInput.value = s.nick;
         } catch {}
@@ -181,17 +161,14 @@
 
     function saveSettings() {
         localStorage.setItem(SETTINGS_KEY, JSON.stringify({
-            server: serverInput.value,
             channel: channelInput.value,
             nick: nickInput.value
         }));
     }
 
-    // Persist connection state so page reload can auto-reconnect
     function saveConnectionState(active) {
         if (active) {
             localStorage.setItem(STATE_KEY, JSON.stringify({
-                server: serverInput.value,
                 channel: channel,
                 nick: nickname,
                 active: true,
@@ -206,7 +183,6 @@
         try {
             const s = JSON.parse(localStorage.getItem(STATE_KEY) || 'null');
             if (!s || !s.active) return null;
-            // Expire after 1 hour
             if (Date.now() - s.ts > 3600000) {
                 localStorage.removeItem(STATE_KEY);
                 return null;
@@ -215,9 +191,10 @@
         } catch { return null; }
     }
 
+    // --- UI helpers ---
     function setStatus(state) {
         statusBadge.className = 'top-status ' + state;
-        const labels = { on: 'Connected', connecting: 'Connecting…', reconnecting: 'Reconnecting…', off: 'Offline' };
+        const labels = { on: 'Connected', connecting: 'Joining…', off: 'Offline' };
         statusBadge.textContent = labels[state] || 'Offline';
     }
 
@@ -227,7 +204,6 @@
         setTimeout(() => errorToast.classList.remove('on'), 4000);
     }
 
-    // Nick color hashing
     function nickColor(nick) {
         if (nickColors[nick]) return nickColors[nick];
         const colors = ['#9a77ff','#cc785c','#3a8f6b','#89530e','#7c5ce0','#b85c3a','#c19a6b','#6b5d52','#2d7356','#d4764e'];
@@ -280,7 +256,7 @@
         nickEl.className = 'msg-nick';
 
         if (type === 'system') {
-            nickEl.textContent = '•';
+            nickEl.textContent = '\u2022';
         } else if (type === 'action') {
             nickEl.textContent = '* ' + nick;
             nickEl.style.color = nickColor(nick);
@@ -302,28 +278,160 @@
         div.appendChild(textEl);
         messagesEl.appendChild(div);
 
-        // Auto-scroll
         messagesEl.scrollTop = messagesEl.scrollHeight;
 
-        // Limit messages
         while (messagesEl.children.length > MAX_MESSAGES) {
             messagesEl.removeChild(messagesEl.firstChild);
         }
     }
 
     function updateUserCount() {
-        userCount.textContent = users.size > 0 ? users.size + ' users' : '';
+        // +1 for self
+        const count = peers.size + 1;
+        userCount.textContent = count + (count === 1 ? ' user' : ' users');
     }
 
-    // IRC send
-    function sendRaw(data) {
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(data + '\r\n');
+    // --- Bugout P2P connection ---
+    function connect() {
+        const chan = channelInput.value.trim();
+        let nick = nickInput.value.trim();
+
+        if (!chan) { showError('Enter a channel'); return; }
+
+        if (!chan.startsWith('#')) channel = '#' + chan;
+        else channel = chan;
+
+        if (!nick) nick = 'user' + Math.floor(Math.random() * 9000 + 1000);
+        nick = nick.replace(/[^a-zA-Z0-9_\-]/g, '').substring(0, 16);
+        if (!nick) nick = 'user' + Math.floor(Math.random() * 9000 + 1000);
+        nickname = nick;
+
+        saveSettings();
+        connectBtn.disabled = true;
+        setStatus('connecting');
+
+        // Switch to chat view
+        connectView.classList.add('hidden');
+        chatView.classList.add('active');
+        channelLabel.textContent = channel;
+        channelTopic.textContent = 'p2p';
+        nickDisplay.textContent = nickname;
+        topTitle.textContent = channel;
+        msgInput.focus();
+        messagesEl.replaceChildren();
+        peers.clear();
+        updateUserCount();
+
+        addMessage('', 'Joining ' + channel + '…', 'system');
+
+        try {
+            bugout = new Bugout(SWARM_PREFIX + channel, {
+                announce: DEFAULT_TRACKERS,
+                timeout: 120000,
+                heartbeat: 30000,
+            });
+        } catch (e) {
+            showError('Failed to create swarm');
+            connectBtn.disabled = false;
+            setStatus('off');
+            connectView.classList.remove('hidden');
+            chatView.classList.remove('active');
+            return;
         }
+
+        connected = true;
+
+        addMessage('', 'Swarm joined. Waiting for peers…', 'system');
+        setStatus('on');
+        saveConnectionState(true);
+
+        // Broadcast hello periodically until we see peers
+        let helloBroadcast = setInterval(() => {
+            if (bugout && connected) {
+                bugout.send({ t: 'hello', nick: nickname });
+            } else {
+                clearInterval(helloBroadcast);
+            }
+        }, 10000);
+
+        // Initial hello
+        setTimeout(() => {
+            if (bugout && connected) {
+                bugout.send({ t: 'hello', nick: nickname });
+            }
+        }, 2000);
+
+        bugout.on('seen', (address) => {
+            if (!peers.has(address)) {
+                peers.set(address, { nick: address.substring(0, 8) });
+                updateUserCount();
+            }
+            // Introduce ourselves to the new peer
+            if (bugout) {
+                bugout.send(address, { t: 'hello', nick: nickname });
+            }
+        });
+
+        bugout.on('message', (address, msg) => {
+            if (typeof msg !== 'object' || !msg.t) return;
+
+            switch (msg.t) {
+                case 'hello': {
+                    const prev = peers.get(address);
+                    const isNew = !prev || prev.nick === address.substring(0, 8);
+                    peers.set(address, { nick: msg.nick });
+                    if (isNew) {
+                        addMessage('', msg.nick + ' joined ' + channel, 'system');
+                    }
+                    updateUserCount();
+                    break;
+                }
+                case 'chat':
+                    addMessage(msg.nick || address.substring(0, 8), msg.text, '');
+                    break;
+                case 'action':
+                    addMessage(msg.nick || address.substring(0, 8), msg.text, 'action');
+                    break;
+                case 'nick': {
+                    const peer = peers.get(address);
+                    const oldNick = peer ? peer.nick : msg.old;
+                    peers.set(address, { nick: msg.nick });
+                    addMessage('', oldNick + ' is now known as ' + msg.nick, 'system');
+                    break;
+                }
+                case 'leave': {
+                    const peer = peers.get(address);
+                    if (peer) {
+                        addMessage('', peer.nick + ' left', 'system');
+                        peers.delete(address);
+                        updateUserCount();
+                    }
+                    break;
+                }
+            }
+        });
+
+        bugout.on('left', (address) => {
+            const peer = peers.get(address);
+            if (peer) {
+                addMessage('', peer.nick + ' left', 'system');
+                peers.delete(address);
+                updateUserCount();
+            }
+        });
+
+        bugout.on('timeout', (address) => {
+            const peer = peers.get(address);
+            if (peer) {
+                addMessage('', peer.nick + ' timed out', 'system');
+                peers.delete(address);
+                updateUserCount();
+            }
+        });
     }
 
     function sendMessage(text) {
-        if (!text || !registered) return;
+        if (!text || !bugout || !connected) return;
 
         if (text.startsWith('/')) {
             const parts = text.substring(1).split(' ');
@@ -332,507 +440,65 @@
 
             switch (cmd) {
                 case 'ME':
-                    sendRaw('PRIVMSG ' + channel + ' :\x01ACTION ' + args + '\x01');
-                    addMessage(nickname, args, 'action');
-                    break;
-                case 'NICK':
-                    if (args) sendRaw('NICK ' + args.split(' ')[0]);
-                    break;
-                case 'TOPIC':
-                    sendRaw('TOPIC ' + channel + (args ? ' :' + args : ''));
-                    break;
-                case 'QUIT':
-                    sendRaw('QUIT :' + (args || 'Goodbye'));
-                    intentionalDisconnect = true;
-                    break;
-                case 'MSG':
-                case 'PRIVMSG': {
-                    const msgParts = args.split(' ');
-                    const target = msgParts[0];
-                    const msg = msgParts.slice(1).join(' ');
-                    if (target && msg) {
-                        sendRaw('PRIVMSG ' + target + ' :' + msg);
-                        addMessage(nickname, '→ ' + target + ': ' + msg, '');
+                    if (args) {
+                        bugout.send({ t: 'action', nick: nickname, text: args });
+                        addMessage(nickname, args, 'action');
                     }
                     break;
-                }
+                case 'NICK':
+                    if (args) {
+                        const newNick = args.split(' ')[0].replace(/[^a-zA-Z0-9_\-]/g, '').substring(0, 16);
+                        if (newNick && newNick !== nickname) {
+                            const oldNick = nickname;
+                            nickname = newNick;
+                            nickDisplay.textContent = newNick;
+                            nickInput.value = newNick;
+                            bugout.send({ t: 'nick', old: oldNick, nick: newNick });
+                            addMessage('', oldNick + ' is now known as ' + newNick, 'system');
+                            saveSettings();
+                            saveConnectionState(true);
+                        }
+                    }
+                    break;
+                case 'QUIT':
+                    disconnect();
+                    break;
                 case 'RECONNECT':
-                    addMessage('', 'Forcing reconnect…', 'system');
-                    intentionalDisconnect = false;
-                    reconnectAttempts = 0;
-                    if (ws) { ws.close(); ws = null; }
-                    scheduleReconnect();
+                    addMessage('', 'Reconnecting…', 'system');
+                    disconnect();
+                    setTimeout(() => {
+                        channelInput.value = channel;
+                        nickInput.value = nickname;
+                        connect();
+                    }, 500);
+                    break;
+                case 'PEERS':
+                    addMessage('', 'Connected peers: ' + peers.size, 'system');
+                    peers.forEach((peer, addr) => {
+                        addMessage('', '  ' + peer.nick + ' (' + addr.substring(0, 8) + '…)', 'system');
+                    });
+                    break;
+                case 'HELP':
+                    addMessage('', 'Commands: /me, /nick, /peers, /reconnect, /quit', 'system');
                     break;
                 default:
-                    sendRaw(text.substring(1));
+                    addMessage('', 'Unknown command. Type /help for available commands.', 'system');
                     break;
             }
         } else {
-            sendRaw('PRIVMSG ' + channel + ' :' + text);
+            bugout.send({ t: 'chat', nick: nickname, text: text });
             addMessage(nickname, text, '');
         }
     }
 
-    // --- Keepalive: client-side PING ---
-    function startKeepalive() {
-        stopKeepalive();
-        lastPong = Date.now();
-        keepaliveInterval = setInterval(() => {
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                sendRaw('PING :keepalive');
-            }
-        }, KEEPALIVE_INTERVAL_MS);
-        pongCheckInterval = setInterval(() => {
-            if (registered && (Date.now() - lastPong > PONG_TIMEOUT_MS)) {
-                addMessage('', 'Connection appears dead, reconnecting…', 'system');
-                if (ws) { ws.close(); ws = null; }
-            }
-        }, KEEPALIVE_INTERVAL_MS);
-    }
-
-    function stopKeepalive() {
-        if (keepaliveInterval) { clearInterval(keepaliveInterval); keepaliveInterval = null; }
-        if (pongCheckInterval) { clearInterval(pongCheckInterval); pongCheckInterval = null; }
-    }
-
-    // --- Reconnection logic ---
-    function getReconnectDelay() {
-        // Exponential backoff with jitter: min(base * 2^attempts, max) + random jitter
-        const delay = Math.min(BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY);
-        const jitter = Math.random() * 1000;
-        return delay + jitter;
-    }
-
-    function scheduleReconnect() {
-        if (intentionalDisconnect) return;
-        if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-            addMessage('', 'Max reconnect attempts reached. Use /reconnect or reload the page.', 'system');
-            setStatus('off');
-            saveConnectionState(false);
-            return;
-        }
-        const delay = getReconnectDelay();
-        const delaySec = (delay / 1000).toFixed(1);
-        reconnectAttempts++;
-        addMessage('', 'Reconnecting in ' + delaySec + 's (attempt ' + reconnectAttempts + '/' + MAX_RECONNECT_ATTEMPTS + ')…', 'system');
-        setStatus('reconnecting');
-        reconnectTimer = setTimeout(() => {
-            reconnectTimer = null;
-            doReconnect();
-        }, delay);
-    }
-
-    function cancelReconnect() {
-        if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
-    }
-
-    function doReconnect() {
-        if (intentionalDisconnect) return;
-        const server = serverInput.value.trim();
-        if (!server || !channel || !nickname) return;
-
-        setStatus('reconnecting');
-
-        try {
-            ws = new WebSocket(server);
-        } catch (e) {
-            showError('Reconnect failed');
-            scheduleReconnect();
-            return;
-        }
-
-        // Connection timeout for reconnect attempts
-        connectTimeout = setTimeout(() => {
-            connectTimeout = null;
-            if (ws && ws.readyState !== WebSocket.OPEN) {
-                addMessage('', 'Connection timed out', 'system');
-                ws.close(); // onclose will call scheduleReconnect()
-                ws = null;
-            }
-        }, CONNECT_TIMEOUT_MS);
-
-        ws.onopen = () => {
-            if (connectTimeout) { clearTimeout(connectTimeout); connectTimeout = null; }
-            reconnectAttempts = 0;
-            sendRaw('CAP LS 302');
-            sendRaw('NICK ' + nickname);
-            sendRaw('USER ' + nickname + ' 0 * :' + nickname);
-            addMessage('', 'Reconnected to ' + server, 'system');
-            users.clear();
-            startKeepalive();
-            saveConnectionState(true);
-        };
-
-        ws.onmessage = (event) => {
-            handleMessage(event.data);
-        };
-
-        ws.onerror = () => {
-            showError('Connection error');
-        };
-
-        ws.onclose = () => {
-            if (connectTimeout) { clearTimeout(connectTimeout); connectTimeout = null; }
-            stopKeepalive();
-            registered = false;
-            if (!intentionalDisconnect) {
-                addMessage('', 'Disconnected from server', 'system');
-                scheduleReconnect();
-            }
-        };
-    }
-
-    // IRC message parser
-    function parseIrcMessage(raw) {
-        let tags = {};
-        let prefix = '';
-        let command = '';
-        let params = [];
-        let idx = 0;
-
-        // Parse tags
-        if (raw.startsWith('@')) {
-            const spaceIdx = raw.indexOf(' ');
-            const tagStr = raw.substring(1, spaceIdx);
-            tagStr.split(';').forEach(t => {
-                const eq = t.indexOf('=');
-                if (eq !== -1) {
-                    tags[t.substring(0, eq)] = t.substring(eq + 1);
-                } else {
-                    tags[t] = true;
-                }
-            });
-            idx = spaceIdx + 1;
-        }
-
-        // Skip leading spaces
-        while (raw[idx] === ' ') idx++;
-
-        // Parse prefix
-        if (raw[idx] === ':') {
-            const spaceIdx = raw.indexOf(' ', idx);
-            prefix = raw.substring(idx + 1, spaceIdx);
-            idx = spaceIdx + 1;
-        }
-
-        while (raw[idx] === ' ') idx++;
-
-        // Parse command
-        const cmdEnd = raw.indexOf(' ', idx);
-        if (cmdEnd === -1) {
-            command = raw.substring(idx);
-        } else {
-            command = raw.substring(idx, cmdEnd);
-            idx = cmdEnd + 1;
-
-            // Parse params
-            while (idx < raw.length) {
-                while (raw[idx] === ' ') idx++;
-                if (idx >= raw.length) break;
-                if (raw[idx] === ':') {
-                    params.push(raw.substring(idx + 1));
-                    break;
-                }
-                const nextSpace = raw.indexOf(' ', idx);
-                if (nextSpace === -1) {
-                    params.push(raw.substring(idx));
-                    break;
-                }
-                params.push(raw.substring(idx, nextSpace));
-                idx = nextSpace + 1;
-            }
-        }
-
-        return { tags, prefix, command, params };
-    }
-
-    function getNick(prefix) {
-        const bang = prefix.indexOf('!');
-        return bang !== -1 ? prefix.substring(0, bang) : prefix;
-    }
-
-    // Handle IRC messages
-    function handleMessage(raw) {
-        const lines = raw.split('\r\n').filter(l => l.length > 0);
-        lines.forEach(line => {
-            const msg = parseIrcMessage(line);
-
-            switch (msg.command) {
-                case 'PING':
-                    sendRaw('PONG :' + (msg.params[0] || ''));
-                    break;
-
-                case 'PONG':
-                    // Update keepalive timestamp on any PONG
-                    lastPong = Date.now();
-                    break;
-
-                case 'PRIVMSG': {
-                    const sender = getNick(msg.prefix);
-                    const text = msg.params[1] || '';
-                    const target = msg.params[0];
-
-                    if (text.startsWith('\x01ACTION ') && text.endsWith('\x01')) {
-                        addMessage(sender, text.slice(8, -1), 'action');
-                    } else if (target.toLowerCase() === channel.toLowerCase()) {
-                        addMessage(sender, text, '');
-                    } else {
-                        addMessage(sender, '(private) ' + text, 'notice');
-                    }
-                    break;
-                }
-
-                case 'NOTICE': {
-                    const sender = getNick(msg.prefix) || 'Server';
-                    const text = msg.params[1] || msg.params[0] || '';
-                    addMessage(sender, text, 'notice');
-                    break;
-                }
-
-                case 'JOIN': {
-                    const who = getNick(msg.prefix);
-                    const chan = msg.params[0];
-                    if (who === nickname) {
-                        addMessage('', 'You have joined ' + chan, 'system');
-                    } else {
-                        users.add(who);
-                        updateUserCount();
-                        addMessage('', who + ' joined ' + chan, 'system');
-                    }
-                    break;
-                }
-
-                case 'PART': {
-                    const who = getNick(msg.prefix);
-                    users.delete(who);
-                    updateUserCount();
-                    addMessage('', who + ' left ' + (msg.params[1] ? '(' + msg.params[1] + ')' : ''), 'system');
-                    break;
-                }
-
-                case 'QUIT': {
-                    const who = getNick(msg.prefix);
-                    users.delete(who);
-                    updateUserCount();
-                    addMessage('', who + ' quit' + (msg.params[0] ? ' (' + msg.params[0] + ')' : ''), 'system');
-                    break;
-                }
-
-                case 'KICK': {
-                    const kicked = msg.params[1];
-                    users.delete(kicked);
-                    updateUserCount();
-                    addMessage('', kicked + ' was kicked by ' + getNick(msg.prefix) + (msg.params[2] ? ' (' + msg.params[2] + ')' : ''), 'system');
-                    if (kicked === nickname) {
-                        addMessage('', 'You were kicked. Reconnecting…', 'system');
-                        setTimeout(() => sendRaw('JOIN ' + channel), REJOIN_DELAY_MS);
-                    }
-                    break;
-                }
-
-                case 'NICK': {
-                    const oldNick = getNick(msg.prefix);
-                    const newNick = msg.params[0];
-                    users.delete(oldNick);
-                    users.add(newNick);
-                    updateUserCount();
-                    if (oldNick === nickname) {
-                        nickname = newNick;
-                        nickDisplay.textContent = newNick;
-                    }
-                    addMessage('', oldNick + ' is now known as ' + newNick, 'system');
-                    break;
-                }
-
-                case '332': // RPL_TOPIC
-                    channelTopic.textContent = msg.params[2] || '';
-                    break;
-
-                case '353': { // RPL_NAMREPLY
-                    const names = (msg.params[3] || '').split(' ').filter(n => n);
-                    names.forEach(n => {
-                        // Strip mode prefixes (@, +, %, ~, &)
-                        const clean = n.replace(/^[~&@%+]+/, '');
-                        if (clean) users.add(clean);
-                    });
-                    updateUserCount();
-                    break;
-                }
-
-                case '366': // RPL_ENDOFNAMES
-                    updateUserCount();
-                    break;
-
-                case '001': // RPL_WELCOME
-                    registered = true;
-                    addMessage('', msg.params[1] || 'Connected!', 'system');
-                    setStatus('on');
-                    sendRaw('JOIN ' + channel);
-                    saveConnectionState(true);
-                    break;
-
-                case '433': // ERR_NICKNAMEINUSE
-                    nickname = nickname + '_';
-                    nickDisplay.textContent = nickname;
-                    sendRaw('NICK ' + nickname);
-                    addMessage('', 'Nickname in use, trying ' + nickname, 'system');
-                    break;
-
-                case '005': // RPL_ISUPPORT
-                case '002': // RPL_YOURHOST
-                case '003': // RPL_CREATED
-                case '004': // RPL_MYINFO
-                case '375': // RPL_MOTDSTART
-                case '372': // RPL_MOTD
-                case '376': // RPL_ENDOFMOTD
-                case '251': case '252': case '253': case '254': case '255': // Lusers
-                case '265': case '266': // Local/global users
-                    break;
-
-                case 'ERROR':
-                    addMessage('', 'Server: ' + (msg.params[0] || 'Error'), 'system');
-                    break;
-
-                case 'CAP':
-                    // Handle capability negotiation
-                    if (msg.params[1] === 'LS') {
-                        sendRaw('CAP END');
-                    }
-                    break;
-
-                default:
-                    // Show unknown numerics with useful info
-                    if (/^\d{3}$/.test(msg.command) && msg.params.length > 1) {
-                        const text = msg.params.slice(1).join(' ');
-                        if (text) addMessage('', text, 'system');
-                    }
-                    break;
-            }
-        });
-    }
-
-    // Connect (initial, from UI)
-    function connect() {
-        const server = serverInput.value.trim();
-        const chan = channelInput.value.trim();
-        let nick = nickInput.value.trim();
-
-        if (!server) { showError('Enter a server URL'); return; }
-        if (!chan) { showError('Enter a channel'); return; }
-
-        // Validate server URL
-        try {
-            const url = new URL(server);
-            if (url.protocol !== 'ws:' && url.protocol !== 'wss:') {
-                showError('Server must use ws:// or wss://');
-                return;
-            }
-        } catch {
-            showError('Invalid server URL');
-            return;
-        }
-
-        // Clean channel name
-        if (!chan.startsWith('#')) channel = '#' + chan;
-        else channel = chan;
-
-        // Set nickname
-        if (!nick) nick = 'user' + Math.floor(Math.random() * 9000 + 1000);
-        nick = nick.replace(/[^a-zA-Z0-9_\-]/g, '').substring(0, 16);
-        if (!nick) nick = 'user' + Math.floor(Math.random() * 9000 + 1000);
-        nickname = nick;
-
-        saveSettings();
-        intentionalDisconnect = false;
-        reconnectAttempts = 0;
-        cancelReconnect();
-
-        connectBtn.disabled = true;
-        setStatus('connecting');
-
-        try {
-            ws = new WebSocket(server);
-        } catch (e) {
-            showError('Failed to connect');
-            connectBtn.disabled = false;
-            setStatus('off');
-            return;
-        }
-
-        // Connection timeout
-        connectTimeout = setTimeout(() => {
-            connectTimeout = null;
-            if (ws && ws.readyState !== WebSocket.OPEN) {
-                addMessage('', 'Connection timed out', 'system');
-                ws.close();
-                ws = null;
-                setStatus('off');
-                connectBtn.disabled = false;
-                showError('Connection timed out');
-            }
-        }, CONNECT_TIMEOUT_MS);
-
-        ws.onopen = () => {
-            if (connectTimeout) { clearTimeout(connectTimeout); connectTimeout = null; }
-            reconnectAttempts = 0;
-            sendRaw('CAP LS 302');
-            sendRaw('NICK ' + nickname);
-            sendRaw('USER ' + nickname + ' 0 * :' + nickname);
-
-            connectView.classList.add('hidden');
-            chatView.classList.add('active');
-            channelLabel.textContent = channel;
-            nickDisplay.textContent = nickname;
-            topTitle.textContent = channel;
-            msgInput.focus();
-
-            users.clear();
-            messagesEl.replaceChildren();
-            addMessage('', 'Connecting to ' + server + '…', 'system');
-            startKeepalive();
-            saveConnectionState(true);
-        };
-
-        ws.onmessage = (event) => {
-            handleMessage(event.data);
-        };
-
-        ws.onerror = () => {
-            showError('Connection error');
-        };
-
-        ws.onclose = () => {
-            if (connectTimeout) { clearTimeout(connectTimeout); connectTimeout = null; }
-            stopKeepalive();
-            registered = false;
-            connectBtn.disabled = false;
-
-            if (intentionalDisconnect) {
-                setStatus('off');
-                addMessage('', 'Disconnected from server', 'system');
-                saveConnectionState(false);
-            } else if (chatView.classList.contains('active')) {
-                // Unexpected disconnect after successful connection — auto-reconnect
-                addMessage('', 'Disconnected from server', 'system');
-                scheduleReconnect();
-            } else {
-                // Initial connection failed — don't auto-reconnect
-                setStatus('off');
-            }
-        };
-    }
-
     function disconnect() {
-        intentionalDisconnect = true;
-        cancelReconnect();
-        stopKeepalive();
-        if (connectTimeout) { clearTimeout(connectTimeout); connectTimeout = null; }
-        if (ws) {
-            sendRaw('QUIT :Leaving');
-            ws.close();
-            ws = null;
+        if (bugout) {
+            try { bugout.send({ t: 'leave', nick: nickname }); } catch {}
+            try { bugout.close(); } catch {}
+            bugout = null;
         }
-        registered = false;
+        connected = false;
+        peers.clear();
         setStatus('off');
         connectView.classList.remove('hidden');
         chatView.classList.remove('active');
@@ -840,10 +506,14 @@
         saveConnectionState(false);
     }
 
-    // Events
+    // --- Event listeners ---
     connectBtn.addEventListener('click', connect);
 
     nickInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter') connect();
+    });
+
+    channelInput.addEventListener('keydown', e => {
         if (e.key === 'Enter') connect();
     });
 
@@ -867,32 +537,15 @@
 
     // Back button disconnects
     document.querySelector('.top-bar a').addEventListener('click', e => {
-        if (ws && ws.readyState === WebSocket.OPEN) {
+        if (connected) {
             e.preventDefault();
             disconnect();
         }
     });
 
-    // Handle page visibility — reconnect when tab becomes visible again
-    document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible' && !intentionalDisconnect) {
-            if (ws && ws.readyState === WebSocket.CLOSED) {
-                reconnectAttempts = 0;
-                scheduleReconnect();
-            } else if (!ws && channel && nickname) {
-                const state = loadConnectionState();
-                if (state) {
-                    reconnectAttempts = 0;
-                    scheduleReconnect();
-                }
-            }
-        }
-    });
-
     // Clean up on page unload
     window.addEventListener('beforeunload', () => {
-        if (ws && registered) {
-            // Keep connection state so we can auto-reconnect on reload
+        if (connected) {
             saveConnectionState(true);
         }
     });
@@ -900,14 +553,12 @@
     // Init
     loadSettings();
 
-    // Auto-reconnect if we had an active session
-    (function autoReconnect() {
+    // Auto-rejoin if we had an active session
+    (function autoRejoin() {
         const state = loadConnectionState();
         if (state && state.active) {
-            serverInput.value = state.server;
             channelInput.value = state.channel;
             nickInput.value = state.nick;
-            addMessage('', 'Restoring previous session…', 'system');
             connect();
         }
     })();
