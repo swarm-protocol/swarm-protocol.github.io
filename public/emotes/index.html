@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
     <meta name="theme-color" content="#f5f3ef">
     <link rel="manifest" href="manifest.json">
     <link rel="icon" href="icon-192.png" sizes="192x192">
@@ -131,7 +131,7 @@
                 <div class="install-title">Install App</div>
                 <button class="install-close" id="installClose" aria-label="Close">✕</button>
             </div>
-            <div class="install-msg">Add Special Needs to your home screen for quick access and offline use.</div>
+            <div class="install-msg">Add Emotes Compressor to your home screen for quick access and offline use.</div>
             <div class="install-actions">
                 <button class="install-btn install-btn-secondary" id="installDismiss">Not Now</button>
                 <button class="install-btn install-btn-primary" id="installConfirm">Install</button>
@@ -398,13 +398,13 @@
         $('zstat').classList.add('hidden');
         $('rgrid').innerHTML = results.map((r, i) => `
             <div class="ri">
-                <img src="${r.thumb}" />
+                <img src="${r.thumb}" alt="${r.filename}" />
                 <div class="ri-info">
                     <div class="ri-name">${r.filename}</div>
                     <div class="ri-size">${(r.blob.size / 1024).toFixed(2)}KB</div>
                     <div class="ri-res">${r.dim}x${r.dim}px</div>
                 </div>
-                <button class="ri-dl" onclick="dlOne(${i})">&#8595;</button>
+                <button class="ri-dl" onclick="dlOne(${i})" aria-label="Download ${r.filename}" title="Download ${r.filename}">&#8595;</button>
             </div>
         `).join('');
     }

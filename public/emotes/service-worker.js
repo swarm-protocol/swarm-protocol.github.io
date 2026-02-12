@@ -36,10 +36,12 @@ self.addEventListener('fetch', event => {
     event.respondWith(
       fetch(event.request)
         .then(response => {
-          const copy = response.clone();
-          event.waitUntil(
-            updateCache(event.request, copy)
-          );
+          if (response && response.ok && (response.type === 'basic' || response.type === 'default')) {
+            const copy = response.clone();
+            event.waitUntil(
+              updateCache(event.request, copy)
+            );
+          }
           return response;
         })
         .catch(err => {
