@@ -446,9 +446,8 @@
             connectTimeout = null;
             if (ws && ws.readyState !== WebSocket.OPEN) {
                 addMessage('', 'Connection timed out', 'system');
-                ws.close();
+                ws.close(); // onclose will call scheduleReconnect()
                 ws = null;
-                scheduleReconnect();
             }
         }, CONNECT_TIMEOUT_MS);
 
@@ -812,10 +811,13 @@
                 setStatus('off');
                 addMessage('', 'Disconnected from server', 'system');
                 saveConnectionState(false);
-            } else {
-                // Unexpected disconnect — auto-reconnect
+            } else if (chatView.classList.contains('active')) {
+                // Unexpected disconnect after successful connection — auto-reconnect
                 addMessage('', 'Disconnected from server', 'system');
                 scheduleReconnect();
+            } else {
+                // Initial connection failed — don't auto-reconnect
+                setStatus('off');
             }
         };
     }
