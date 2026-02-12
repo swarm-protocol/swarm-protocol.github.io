@@ -55,17 +55,30 @@ npm/microtip@0.2.2/microtip.min.css
                 >
                     <span class="icon-wrap-text"></span>
                 </button>
-                <button class="np-btn" onclick="generateLink('url')" type="button">Link</button>
-                <button class="np-btn" onclick="generateLink('markdown')" type="button">Markdown</button>
-                <button class="np-btn" onclick="generateLink('iframe')" type="button">Embed</button>
-                <button class="np-btn" type="button" data-micromodal-trigger="description-modal">About</button>
+                <button class="np-btn np-icon" onclick="generateLink('url')" type="button" aria-label="Link" data-microtip-position="bottom" role="tooltip">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                </button>
+                <button class="np-btn np-icon" onclick="generateLink('markdown')" type="button" aria-label="Markdown" data-microtip-position="bottom" role="tooltip">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h20v16H2z"/><path d="M7 15V9l2.5 3L12 9v6"/><path d="M17 9v6l-2-2"/></svg>
+                </button>
+                <button class="np-btn np-icon" onclick="generateLink('iframe')" type="button" aria-label="Embed" data-microtip-position="bottom" role="tooltip">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                </button>
+                <button class="np-btn np-icon" type="button" data-micromodal-trigger="description-modal" aria-label="About" data-microtip-position="bottom" role="tooltip">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                </button>
             </div>
         </div>
         <div id="copy" class="copy-bar hidden shadow-bottom hide-readonly">
             <div class="copy-inner">
                 <input type="text" value="copy me" id="copy-link" onclick="this.setSelectionRange(0, this.value.length)" />
-                <button class="clipboard np-btn" id="copy-btn" data-clipboard-target="#copy-link" type="button">Copy</button>
-                <button class="np-btn" onclick="hideCopyBar(false)" type="button">Cancel</button>
+                <button class="clipboard np-btn np-icon" id="copy-btn" data-clipboard-target="#copy-link" type="button" aria-label="Copy" data-microtip-position="bottom" role="tooltip">
+                    <svg class="copy-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                    <svg class="check-icon hidden" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                </button>
+                <button class="np-btn np-icon" onclick="hideCopyBar(false)" type="button" aria-label="Cancel" data-microtip-position="bottom" role="tooltip">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
             </div>
         </div>
         <div id="progress"></div>

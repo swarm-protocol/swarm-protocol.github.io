@@ -257,6 +257,15 @@ button:active {
 .np-btn {
     padding: 2px 8px;
 }
+.np-icon {
+    padding: 4px 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.np-icon svg {
+    display: block;
+}
 
 input::-webkit-search-cancel-button {
     display: none;

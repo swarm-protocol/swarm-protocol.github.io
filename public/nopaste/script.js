@@ -134,10 +134,14 @@ const hideCopyBar = (success) => {
         copyBar.classList.add('hidden');
         return;
     }
-    copyButton.innerText = 'Copied !';
+    copyButton.querySelector('.copy-icon').classList.add('hidden');
+    copyButton.querySelector('.check-icon').classList.remove('hidden');
+    copyButton.setAttribute('aria-label', 'Copied');
     setTimeout(() => {
         copyBar.classList.add('hidden');
-        copyButton.innerText = 'Copy';
+        copyButton.querySelector('.check-icon').classList.add('hidden');
+        copyButton.querySelector('.copy-icon').classList.remove('hidden');
+        copyButton.setAttribute('aria-label', 'Copy');
     }, 800);
 };
 
