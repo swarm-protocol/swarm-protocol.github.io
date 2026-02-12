@@ -1,0 +1,85 @@
+name: CI - Validate Applications
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  validate-structure:
+    name: Validate Application Structure
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify root files exist
+        run: |
+          echo "Checking root application files..."
+          for file in index.html manifest.json service-worker.js icon-192.png icon-512.png; do
+            if [ ! -f "$file" ]; then
+              echo "::error::Missing root file: $file"
+              exit 1
+            fi
+            echo "✓ $file"
+          done
+
+      - name: Verify application directories
+        run: |
+          echo "Checking application directories..."
+          apps=("emotes" "blog" "filehost" "nopaste" "feeds" "irc")
+          for app in "${apps[@]}"; do
+            if [ ! -d "public/$app" ]; then
+              echo "::error::Missing application directory: public/$app"
+              exit 1
+            fi
+            if [ ! -f "public/$app/index.html" ]; then
+              echo "::error::Missing index.html for application: $app"
+              exit 1
+            fi
+            echo "✓ public/$app/index.html"
+          done
+
+      - name: Summary
+        run: |
+          echo "## Application Structure Validation" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Application | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------------|--------|" >> $GITHUB_STEP_SUMMARY
+          for app in emotes blog filehost nopaste feeds irc; do
+            echo "| $app | ✅ |" >> $GITHUB_STEP_SUMMARY
+          done
+
+  validate-html:
+    name: Validate HTML
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check HTML files are well-formed
+        run: |
+          echo "Checking HTML files for basic validity..."
+          errors=0
+          while IFS= read -r -d '' file; do
+            if ! grep -q '<!DOCTYPE html>' "$file" && ! grep -q '<!doctype html>' "$file"; then
+              echo "::warning file=$file::Missing DOCTYPE declaration"
+            fi
+            if ! grep -q '<html' "$file"; then
+              echo "::error file=$file::Missing <html> tag"
+              errors=$((errors + 1))
+            fi
+            if ! grep -q '</html>' "$file"; then
+              echo "::error file=$file::Missing closing </html> tag"
+              errors=$((errors + 1))
+            fi
+            echo "✓ $file"
+          done < <(find . -name "*.html" -not -path "./.git/*" -print0)
+
+          if [ "$errors" -gt 0 ]; then
+            echo "::error::Found $errors HTML validation error(s)"
+            exit 1
+          fi
+          echo "All HTML files passed basic validation."

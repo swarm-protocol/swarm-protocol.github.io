@@ -1,0 +1,188 @@
+name: Test Connections
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 6 * * 1'  # Weekly on Monday at 6 AM UTC
+  workflow_dispatch:
+
+jobs:
+  test-service-worker:
+    name: Validate Service Workers
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate root service worker
+        run: |
+          echo "Checking root service-worker.js..."
+          if [ ! -f "service-worker.js" ]; then
+            echo "::error::Root service-worker.js not found"
+            exit 1
+          fi
+          # Verify it references expected cache assets
+          if ! grep -q "CACHE_NAME" service-worker.js; then
+            echo "::error::service-worker.js missing CACHE_NAME"
+            exit 1
+          fi
+          echo "✓ Root service worker is valid"
+
+      - name: Validate emotes service worker
+        run: |
+          echo "Checking emotes service-worker.js..."
+          if [ ! -f "public/emotes/service-worker.js" ]; then
+            echo "::warning::Emotes service-worker.js not found (PWA may not work)"
+          else
+            echo "✓ Emotes service worker exists"
+          fi
+
+      - name: Validate cached asset references
+        run: |
+          echo "Verifying assets referenced in service worker exist..."
+          errors=0
+
+          # Check paths in CORE_ASSETS array from root service worker
+          while IFS= read -r asset; do
+            # Strip quotes, commas, whitespace
+            clean=$(echo "$asset" | sed "s/[',]//g" | xargs)
+            # Skip empty, comments, or relative root
+            if [ -z "$clean" ] || [ "$clean" = "./" ]; then
+              continue
+            fi
+            # Normalize path: remove leading ./
+            path="${clean#./}"
+            if [ ! -e "$path" ]; then
+              echo "::warning::Referenced asset missing: $path"
+              errors=$((errors + 1))
+            else
+              echo "✓ $path"
+            fi
+          done < <(sed -n '/CORE_ASSETS/,/\]/p' service-worker.js | grep -o "'[^']*'" | tr -d "'")
+
+          if [ "$errors" -gt 0 ]; then
+            echo "::warning::$errors cached asset reference(s) could not be found"
+          fi
+
+  test-manifests:
+    name: Validate PWA Manifests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Validate root manifest.json
+        run: |
+          echo "Checking root manifest.json..."
+          if ! node -e "JSON.parse(require('fs').readFileSync('manifest.json','utf8'))"; then
+            echo "::error::Root manifest.json is not valid JSON"
+            exit 1
+          fi
+          echo "✓ Root manifest.json is valid JSON"
+
+      - name: Validate emotes manifest.json
+        run: |
+          if [ -f "public/emotes/manifest.json" ]; then
+            echo "Checking emotes manifest.json..."
+            if ! node -e "JSON.parse(require('fs').readFileSync('public/emotes/manifest.json','utf8'))"; then
+              echo "::error::Emotes manifest.json is not valid JSON"
+              exit 1
+            fi
+            echo "✓ Emotes manifest.json is valid JSON"
+          fi
+
+      - name: Validate icon references in manifests
+        run: |
+          echo "Checking icon references..."
+          for manifest in $(find . -name "manifest.json" -not -path "./.git/*"); do
+            dir=$(dirname "$manifest")
+            echo "Processing $manifest..."
+            icons=$(node -e "
+              const m = JSON.parse(require('fs').readFileSync('$manifest','utf8'));
+              if (m.icons) m.icons.forEach(i => console.log(i.src));
+            " 2>/dev/null || true)
+            for icon in $icons; do
+              icon_path="$dir/$icon"
+              if [ ! -f "$icon_path" ]; then
+                echo "::warning file=$manifest::Icon not found: $icon_path"
+              else
+                echo "  ✓ $icon_path"
+              fi
+            done
+          done
+
+  test-application-pages:
+    name: Test Application Pages Serve
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Start local server and test connections
+        run: |
+          # Start a simple HTTP server
+          python3 -m http.server 8080 &
+          SERVER_PID=$!
+          sleep 2
+
+          echo "Testing application endpoints..."
+          errors=0
+
+          endpoints=(
+            "/"
+            "/public/"
+            "/public/emotes/"
+            "/public/blog/"
+            "/public/filehost/"
+            "/public/nopaste/"
+            "/public/feeds/"
+            "/public/irc/"
+          )
+
+          for endpoint in "${endpoints[@]}"; do
+            status=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:8080${endpoint}")
+            if [ "$status" = "200" ]; then
+              echo "✓ $endpoint → $status"
+            else
+              echo "::error::$endpoint → $status (expected 200)"
+              errors=$((errors + 1))
+            fi
+          done
+
+          # Stop the server
+          kill $SERVER_PID 2>/dev/null || true
+
+          if [ "$errors" -gt 0 ]; then
+            echo "::error::$errors endpoint(s) failed connection test"
+            exit 1
+          fi
+          echo "All endpoints returned 200 OK."
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Connection Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Endpoint | Expected |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|----------|" >> $GITHUB_STEP_SUMMARY
+          echo "| / | 200 |" >> $GITHUB_STEP_SUMMARY
+          echo "| /public/ | 200 |" >> $GITHUB_STEP_SUMMARY
+          echo "| /public/emotes/ | 200 |" >> $GITHUB_STEP_SUMMARY
+          echo "| /public/blog/ | 200 |" >> $GITHUB_STEP_SUMMARY
+          echo "| /public/filehost/ | 200 |" >> $GITHUB_STEP_SUMMARY
+          echo "| /public/nopaste/ | 200 |" >> $GITHUB_STEP_SUMMARY
+          echo "| /public/feeds/ | 200 |" >> $GITHUB_STEP_SUMMARY
+          echo "| /public/irc/ | 200 |" >> $GITHUB_STEP_SUMMARY
