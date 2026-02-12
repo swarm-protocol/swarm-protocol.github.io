@@ -21,6 +21,7 @@
         .top-status.off{background:#cc785c;color:#fff}
         .top-status.on{background:#3a8f6b;color:#fff}
         .top-status.connecting{background:#c19a6b;color:#fff;animation:pulse 1.2s ease-in-out infinite}
+        .top-status.reconnecting{background:#c19a6b;color:#fff;animation:pulse 1.2s ease-in-out infinite}
         @keyframes pulse{0%,100%{opacity:.6}50%{opacity:1}}
 
         /* Connect view */
@@ -121,6 +122,7 @@
 
     <script>
     const SETTINGS_KEY = 'irc_settings';
+    const STATE_KEY = 'irc_connection_state';
 
     const serverInput = document.getElementById('serverInput');
     const channelInput = document.getElementById('channelInput');
@@ -148,6 +150,25 @@
     let users = new Set();
     let nickColors = {};
 
+    // --- Reconnection state ---
+    let intentionalDisconnect = false;
+    let reconnectAttempts = 0;
+    const MAX_RECONNECT_ATTEMPTS = 20;
+    const BASE_RECONNECT_DELAY = 1000;  // 1s initial
+    const MAX_RECONNECT_DELAY = 30000;  // 30s cap
+    let reconnectTimer = null;
+
+    // --- Keepalive state ---
+    let keepaliveInterval = null;
+    const KEEPALIVE_INTERVAL_MS = 30000;  // ping every 30s
+    let lastPong = 0;
+    const PONG_TIMEOUT_MS = 60000;  // consider dead if no pong in 60s
+    let pongCheckInterval = null;
+
+    // --- Connection timeout ---
+    let connectTimeout = null;
+    const CONNECT_TIMEOUT_MS = 15000;  // 15s to establish connection
+
     // Load saved settings
     function loadSettings() {
         try {
@@ -166,9 +187,38 @@
         }));
     }
 
+    // Persist connection state so page reload can auto-reconnect
+    function saveConnectionState(active) {
+        if (active) {
+            localStorage.setItem(STATE_KEY, JSON.stringify({
+                server: serverInput.value,
+                channel: channel,
+                nick: nickname,
+                active: true,
+                ts: Date.now()
+            }));
+        } else {
+            localStorage.removeItem(STATE_KEY);
+        }
+    }
+
+    function loadConnectionState() {
+        try {
+            const s = JSON.parse(localStorage.getItem(STATE_KEY) || 'null');
+            if (!s || !s.active) return null;
+            // Expire after 1 hour
+            if (Date.now() - s.ts > 3600000) {
+                localStorage.removeItem(STATE_KEY);
+                return null;
+            }
+            return s;
+        } catch { return null; }
+    }
+
     function setStatus(state) {
         statusBadge.className = 'top-status ' + state;
-        statusBadge.textContent = state === 'on' ? 'Connected' : state === 'connecting' ? 'Connecting…' : 'Offline';
+        const labels = { on: 'Connected', connecting: 'Connecting…', reconnecting: 'Reconnecting…', off: 'Offline' };
+        statusBadge.textContent = labels[state] || 'Offline';
     }
 
     function showError(msg) {
@@ -293,6 +343,7 @@
                     break;
                 case 'QUIT':
                     sendRaw('QUIT :' + (args || 'Goodbye'));
+                    intentionalDisconnect = true;
                     break;
                 case 'MSG':
                 case 'PRIVMSG': {
@@ -305,6 +356,13 @@
                     }
                     break;
                 }
+                case 'RECONNECT':
+                    addMessage('', 'Forcing reconnect…', 'system');
+                    intentionalDisconnect = false;
+                    reconnectAttempts = 0;
+                    if (ws) { ws.close(); ws = null; }
+                    scheduleReconnect();
+                    break;
                 default:
                     sendRaw(text.substring(1));
                     break;
@@ -313,6 +371,116 @@
             sendRaw('PRIVMSG ' + channel + ' :' + text);
             addMessage(nickname, text, '');
         }
+    }
+
+    // --- Keepalive: client-side PING ---
+    function startKeepalive() {
+        stopKeepalive();
+        lastPong = Date.now();
+        keepaliveInterval = setInterval(() => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                sendRaw('PING :keepalive');
+            }
+        }, KEEPALIVE_INTERVAL_MS);
+        pongCheckInterval = setInterval(() => {
+            if (registered && (Date.now() - lastPong > PONG_TIMEOUT_MS)) {
+                addMessage('', 'Connection appears dead, reconnecting…', 'system');
+                if (ws) { ws.close(); ws = null; }
+            }
+        }, KEEPALIVE_INTERVAL_MS);
+    }
+
+    function stopKeepalive() {
+        if (keepaliveInterval) { clearInterval(keepaliveInterval); keepaliveInterval = null; }
+        if (pongCheckInterval) { clearInterval(pongCheckInterval); pongCheckInterval = null; }
+    }
+
+    // --- Reconnection logic ---
+    function getReconnectDelay() {
+        // Exponential backoff with jitter: min(base * 2^attempts, max) + random jitter
+        const delay = Math.min(BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY);
+        const jitter = Math.random() * 1000;
+        return delay + jitter;
+    }
+
+    function scheduleReconnect() {
+        if (intentionalDisconnect) return;
+        if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+            addMessage('', 'Max reconnect attempts reached. Use /reconnect or reload the page.', 'system');
+            setStatus('off');
+            saveConnectionState(false);
+            return;
+        }
+        const delay = getReconnectDelay();
+        const delaySec = (delay / 1000).toFixed(1);
+        reconnectAttempts++;
+        addMessage('', 'Reconnecting in ' + delaySec + 's (attempt ' + reconnectAttempts + '/' + MAX_RECONNECT_ATTEMPTS + ')…', 'system');
+        setStatus('reconnecting');
+        reconnectTimer = setTimeout(() => {
+            reconnectTimer = null;
+            doReconnect();
+        }, delay);
+    }
+
+    function cancelReconnect() {
+        if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+    }
+
+    function doReconnect() {
+        if (intentionalDisconnect) return;
+        const server = serverInput.value.trim();
+        if (!server || !channel || !nickname) return;
+
+        setStatus('reconnecting');
+
+        try {
+            ws = new WebSocket(server);
+        } catch (e) {
+            showError('Reconnect failed');
+            scheduleReconnect();
+            return;
+        }
+
+        // Connection timeout for reconnect attempts
+        connectTimeout = setTimeout(() => {
+            connectTimeout = null;
+            if (ws && ws.readyState !== WebSocket.OPEN) {
+                addMessage('', 'Connection timed out', 'system');
+                ws.close();
+                ws = null;
+                scheduleReconnect();
+            }
+        }, CONNECT_TIMEOUT_MS);
+
+        ws.onopen = () => {
+            if (connectTimeout) { clearTimeout(connectTimeout); connectTimeout = null; }
+            reconnectAttempts = 0;
+            sendRaw('CAP LS 302');
+            sendRaw('NICK ' + nickname);
+            sendRaw('USER ' + nickname + ' 0 * :' + nickname);
+            addMessage('', 'Reconnected to ' + server, 'system');
+            users.clear();
+            startKeepalive();
+            saveConnectionState(true);
+        };
+
+        ws.onmessage = (event) => {
+            handleMessage(event.data);
+        };
+
+        ws.onerror = () => {
+            showError('Connection error');
+        };
+
+        ws.onclose = () => {
+            if (connectTimeout) { clearTimeout(connectTimeout); connectTimeout = null; }
+            stopKeepalive();
+            registered = false;
+            if (!intentionalDisconnect) {
+                addMessage('', 'Disconnected from server', 'system');
+                scheduleReconnect();
+            }
+        };
     }
 
     // IRC message parser
@@ -393,6 +561,11 @@
             switch (msg.command) {
                 case 'PING':
                     sendRaw('PONG :' + (msg.params[0] || ''));
+                    break;
+
+                case 'PONG':
+                    // Update keepalive timestamp on any PONG
+                    lastPong = Date.now();
                     break;
 
                 case 'PRIVMSG': {
@@ -496,6 +669,7 @@
                     addMessage('', msg.params[1] || 'Connected!', 'system');
                     setStatus('on');
                     sendRaw('JOIN ' + channel);
+                    saveConnectionState(true);
                     break;
 
                 case '433': // ERR_NICKNAMEINUSE
@@ -538,7 +712,7 @@
         });
     }
 
-    // Connect
+    // Connect (initial, from UI)
     function connect() {
         const server = serverInput.value.trim();
         const chan = channelInput.value.trim();
@@ -570,6 +744,9 @@
         nickname = nick;
 
         saveSettings();
+        intentionalDisconnect = false;
+        reconnectAttempts = 0;
+        cancelReconnect();
 
         connectBtn.disabled = true;
         setStatus('connecting');
@@ -583,7 +760,22 @@
             return;
         }
 
+        // Connection timeout
+        connectTimeout = setTimeout(() => {
+            connectTimeout = null;
+            if (ws && ws.readyState !== WebSocket.OPEN) {
+                addMessage('', 'Connection timed out', 'system');
+                ws.close();
+                ws = null;
+                setStatus('off');
+                connectBtn.disabled = false;
+                showError('Connection timed out');
+            }
+        }, CONNECT_TIMEOUT_MS);
+
         ws.onopen = () => {
+            if (connectTimeout) { clearTimeout(connectTimeout); connectTimeout = null; }
+            reconnectAttempts = 0;
             sendRaw('CAP LS 302');
             sendRaw('NICK ' + nickname);
             sendRaw('USER ' + nickname + ' 0 * :' + nickname);
@@ -598,6 +790,8 @@
             users.clear();
             messagesEl.replaceChildren();
             addMessage('', 'Connecting to ' + server + '…', 'system');
+            startKeepalive();
+            saveConnectionState(true);
         };
 
         ws.onmessage = (event) => {
@@ -609,14 +803,28 @@
         };
 
         ws.onclose = () => {
-            setStatus('off');
+            if (connectTimeout) { clearTimeout(connectTimeout); connectTimeout = null; }
+            stopKeepalive();
             registered = false;
             connectBtn.disabled = false;
-            addMessage('', 'Disconnected from server', 'system');
+
+            if (intentionalDisconnect) {
+                setStatus('off');
+                addMessage('', 'Disconnected from server', 'system');
+                saveConnectionState(false);
+            } else {
+                // Unexpected disconnect — auto-reconnect
+                addMessage('', 'Disconnected from server', 'system');
+                scheduleReconnect();
+            }
         };
     }
 
     function disconnect() {
+        intentionalDisconnect = true;
+        cancelReconnect();
+        stopKeepalive();
+        if (connectTimeout) { clearTimeout(connectTimeout); connectTimeout = null; }
         if (ws) {
             sendRaw('QUIT :Leaving');
             ws.close();
@@ -627,6 +835,7 @@
         connectView.classList.remove('hidden');
         chatView.classList.remove('active');
         connectBtn.disabled = false;
+        saveConnectionState(false);
     }
 
     // Events
@@ -662,8 +871,44 @@
         }
     });
 
+    // Handle page visibility — reconnect when tab becomes visible again
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && !intentionalDisconnect) {
+            if (ws && ws.readyState === WebSocket.CLOSED) {
+                reconnectAttempts = 0;
+                scheduleReconnect();
+            } else if (!ws && channel && nickname) {
+                const state = loadConnectionState();
+                if (state) {
+                    reconnectAttempts = 0;
+                    scheduleReconnect();
+                }
+            }
+        }
+    });
+
+    // Clean up on page unload
+    window.addEventListener('beforeunload', () => {
+        if (ws && registered) {
+            // Keep connection state so we can auto-reconnect on reload
+            saveConnectionState(true);
+        }
+    });
+
     // Init
     loadSettings();
+
+    // Auto-reconnect if we had an active session
+    (function autoReconnect() {
+        const state = loadConnectionState();
+        if (state && state.active) {
+            serverInput.value = state.server;
+            channelInput.value = state.channel;
+            nickInput.value = state.nick;
+            addMessage('', 'Restoring previous session…', 'system');
+            connect();
+        }
+    })();
     </script>
 </body>
 </html>
