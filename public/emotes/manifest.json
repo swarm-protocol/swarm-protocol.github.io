@@ -1,6 +1,6 @@
 {
-  "name": "Special Needs",
-  "short_name": "Special Needs",
+  "name": "Special Needs Emotes Compressor",
+  "short_name": "Emotes",
   "description": "Resize and package PNG emotes for quick sharing.",
   "start_url": "./",
   "scope": "./",

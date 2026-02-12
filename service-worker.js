@@ -5,17 +5,24 @@ const CORE_ASSETS = [
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
+  './public/',
   './public/index.html',
+  './public/emotes/',
   './public/emotes/index.html',
   './public/emotes/manifest.json',
   './public/emotes/icon-192.png',
   './public/emotes/icon-512.png',
+  './public/nopaste/',
   './public/nopaste/index.html',
   './public/nopaste/style.css',
   './public/nopaste/script.js',
+  './public/feeds/',
   './public/feeds/index.html',
+  './public/filehost/',
   './public/filehost/index.html',
+  './public/blog/',
   './public/blog/index.html',
+  './public/irc/',
   './public/irc/index.html'
 ];
 
@@ -35,7 +42,7 @@ self.addEventListener('install', event => {
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(keys => Promise.all(
-      keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))
+      keys.filter(key => key.startsWith('special-needs-pwa-') && key !== CACHE_NAME).map(key => caches.delete(key))
     ))
   );
   self.clients.claim();

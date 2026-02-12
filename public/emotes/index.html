@@ -491,9 +491,10 @@
     const installDismiss = $('installDismiss');
     const installClose = $('installClose');
 
-    // Check if user has previously dismissed
-    const hasUserDismissed = () => localStorage.getItem('pwa-install-dismissed') === 'true';
-    const setUserDismissed = () => localStorage.setItem('pwa-install-dismissed', 'true');
+    // Check if user has previously dismissed for this app/scope
+    const INSTALL_DISMISSED_KEY = 'pwa-install-dismissed:' + (window.location.pathname.replace(/\/+$/, '') || '/');
+    const hasUserDismissed = () => localStorage.getItem(INSTALL_DISMISSED_KEY) === 'true';
+    const setUserDismissed = () => localStorage.setItem(INSTALL_DISMISSED_KEY, 'true');
     
     // Shared dismiss handler
     const handleDismiss = () => {
